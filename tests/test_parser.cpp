@@ -79,6 +79,16 @@ TEST_F(ExecutionTest, IfKeywordBranching) {
     EXPECT_EQ(mock_hal::get_raw_print_buffer(), "1\n");
 }
 
+TEST_F(ExecutionTest, IfElseBranching) {
+    store_line(10, lex("A = 0"));
+    store_line(20, lex("IF A = 1 THEN PRINT 111 ELSE PRINT 222"));
+    store_line(30, lex("IF A = 0 THEN PRINT 333 ELSE PRINT 444"));
+    run_program(10);
+    // A=0, so 111 is skipped, 222 is printed.
+    // A=0, so 333 is printed, 444 is skipped.
+    EXPECT_EQ(mock_hal::get_raw_print_buffer(), "222\n333\n");
+}
+
 TEST_F(ExecutionTest, ForNextLoop) {
     store_line(10, lex("FOR I = 1 TO 3"));
     store_line(20, lex("PRINT I"));
@@ -298,5 +308,57 @@ TEST_F(DataReadTest, OutOfDataError) {
     run_program();
     
     EXPECT_TRUE(mock_hal::get_raw_print_buffer().find("Out of DATA") != std::string::npos);
+}
+
+// ---------------------------------------------------------
+// Built-in Functions Test
+// ---------------------------------------------------------
+class BuiltInFunctionsTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        clear_program();
+        mock_hal::reset();
+    }
+};
+
+TEST_F(BuiltInFunctionsTest, MathFunctions) {
+    parse_and_execute(lex("PRINT ABS(-15)"));
+    EXPECT_EQ(mock_hal::get_raw_print_buffer(), "15\n");
+    mock_hal::reset();
+    
+    parse_and_execute(lex("PRINT INT(3.7)"));
+    EXPECT_EQ(mock_hal::get_raw_print_buffer(), "3\n");
+    mock_hal::reset();
+    
+    parse_and_execute(lex("A = RND(10)")); // RND between 0 and 10
+    // Result should be > 0 (well, >= 0) but won't crash
+    // Since we don't know the exact value, verify error wasn't encountered
+    EXPECT_EQ(mock_hal::get_raw_print_buffer(), "");
+}
+
+TEST_F(BuiltInFunctionsTest, StringFunctions) {
+    parse_and_execute(lex("A$ = \"HELLO WORLD\""));
+    
+    parse_and_execute(lex("PRINT LEN(A$)"));
+    EXPECT_EQ(mock_hal::get_raw_print_buffer(), "11\n");
+    mock_hal::reset();
+    
+    parse_and_execute(lex("PRINT LEFT$(A$, 4)"));
+    EXPECT_EQ(mock_hal::get_raw_print_buffer(), "HELL\n");
+    mock_hal::reset();
+    
+    // MID$(STRING, start(1-based), length)
+    parse_and_execute(lex("PRINT MID$(A$, 7, 5)"));
+    EXPECT_EQ(mock_hal::get_raw_print_buffer(), "WORLD\n");
+    mock_hal::reset();
+}
+
+TEST_F(BuiltInFunctionsTest, FunctionErrorHandling) {
+    parse_and_execute(lex("PRINT ABS(\"STRING\")"));
+    EXPECT_TRUE(mock_hal::get_raw_print_buffer().find("Type Mismatch") != std::string::npos);
+    mock_hal::reset();
+    
+    parse_and_execute(lex("PRINT LEN(123)"));
+    EXPECT_TRUE(mock_hal::get_raw_print_buffer().find("Type Mismatch") != std::string::npos);
 }
 

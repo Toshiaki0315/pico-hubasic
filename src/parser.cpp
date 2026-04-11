@@ -4,6 +4,8 @@
 #include <map>
 #include <stdexcept>
 #include <iostream>
+#include <cmath>
+#include <cstdlib>
 
 // ---------------------------------------------------------
 // Data Representation
@@ -83,19 +85,61 @@ static Value parse_factor(const std::vector<Token>& tokens, size_t& pos) {
         std::string var_name = t.text;
         pos++;
         
-        // Array Access: A(idx)
+        // Array Access or Function Call: RND(1), MID$(A$, 1, 2), A(idx)
         if (pos < tokens.size() && tokens[pos].type == TokenType::LPAREN) {
             pos++; // skip '('
-            Value idx_val = parse_relation(tokens, pos);
-            if (idx_val.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: Array index must be numeric");
-            
+            std::vector<Value> args;
+            args.push_back(parse_relation(tokens, pos));
+            while (pos < tokens.size() && tokens[pos].type == TokenType::COMMA) {
+                pos++;
+                args.push_back(parse_relation(tokens, pos));
+            }
             if (pos < tokens.size() && tokens[pos].type == TokenType::RPAREN) {
                 pos++; // skip ')'
             } else {
-                throw std::runtime_error("Syntax Error: Expected ')' for array access");
+                throw std::runtime_error("Syntax Error: Expected ')' for function or array");
             }
             
-            int idx = static_cast<int>(idx_val.num_val);
+            // Built-in functions
+            if (var_name == "ABS") {
+                if (args.size() != 1 || args[0].type != Value::Type::NUM) throw std::runtime_error("Type Mismatch/Arg Count in ABS");
+                return Value(std::abs(args[0].num_val));
+            } else if (var_name == "INT") {
+                if (args.size() != 1 || args[0].type != Value::Type::NUM) throw std::runtime_error("Type Mismatch/Arg Count in INT");
+                return Value(std::floor(args[0].num_val));
+            } else if (var_name == "RND") {
+                if (args.size() != 1 || args[0].type != Value::Type::NUM) throw std::runtime_error("Type Mismatch/Arg Count in RND");
+                float scale = args[0].num_val;
+                float r = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+                return Value(r * scale);
+            } else if (var_name == "LEN") {
+                if (args.size() != 1 || args[0].type != Value::Type::STR) throw std::runtime_error("Type Mismatch/Arg Count in LEN");
+                return Value(static_cast<float>(args[0].str_val.length()));
+            } else if (var_name == "MID$") {
+                if (args.size() != 3 || args[0].type != Value::Type::STR || args[1].type != Value::Type::NUM || args[2].type != Value::Type::NUM)
+                    throw std::runtime_error("Type Mismatch/Arg Count in MID$");
+                int start = static_cast<int>(args[1].num_val) - 1; // BASIC arrays/strings are usually 1-indexed
+                int len = static_cast<int>(args[2].num_val);
+                std::string s = args[0].str_val;
+                if (start < 0) start = 0;
+                if (len < 0) len = 0;
+                if (start >= s.length()) return Value(std::string(""));
+                return Value(s.substr(start, len));
+            } else if (var_name == "LEFT$") {
+                if (args.size() != 2 || args[0].type != Value::Type::STR || args[1].type != Value::Type::NUM)
+                    throw std::runtime_error("Type Mismatch/Arg Count in LEFT$");
+                int len = static_cast<int>(args[1].num_val);
+                std::string s = args[0].str_val;
+                if (len < 0) len = 0;
+                if (len >= s.length()) return Value(s);
+                return Value(s.substr(0, len));
+            }
+
+            // Fallback: Array lookup
+            if (args.size() != 1) throw std::runtime_error("Syntax Error: Multidimensional arrays not supported yet");
+            if (args[0].type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: Array index must be numeric");
+            
+            int idx = static_cast<int>(args[0].num_val);
             if (arrays.find(var_name) == arrays.end()) {
                 throw std::runtime_error("Array not dimensioned: " + var_name);
             }
@@ -346,8 +390,19 @@ static void execute_statement(const std::vector<Token>& tokens, size_t& pos) {
             pos++;
             if (condition_result.num_val != 0.0f) {
                 execute_statement(tokens, pos);
+                // Skip ELSE if it exists because THEN was taken
+                if (pos < tokens.size() && tokens[pos].type == TokenType::ELSE) {
+                    pos = tokens.size();
+                }
             } else {
-                pos = tokens.size();
+                // Skip until ELSE or EOF
+                while (pos < tokens.size() && tokens[pos].type != TokenType::ELSE && tokens[pos].type != TokenType::END_OF_FILE) {
+                    pos++;
+                }
+                if (pos < tokens.size() && tokens[pos].type == TokenType::ELSE) {
+                    pos++; // Consume ELSE
+                    execute_statement(tokens, pos);
+                }
             }
         } else {
             throw std::runtime_error("Syntax Error: Missing THEN in IF statement");

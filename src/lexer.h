@@ -16,6 +16,7 @@ enum class TokenType {
     RETURN,
     IF,
     THEN,
+    ELSE,
     FOR,
     TO,
     STEP,

@@ -48,6 +48,7 @@ std::vector<Token> lex(const std::string& source) {
             else if (ident == "RETURN") { tokens.push_back({TokenType::RETURN, ident}); }
             else if (ident == "IF") { tokens.push_back({TokenType::IF, ident}); }
             else if (ident == "THEN") { tokens.push_back({TokenType::THEN, ident}); }
+            else if (ident == "ELSE") { tokens.push_back({TokenType::ELSE, ident}); }
             else if (ident == "FOR") { tokens.push_back({TokenType::FOR, ident}); }
             else if (ident == "TO") { tokens.push_back({TokenType::TO, ident}); }
             else if (ident == "STEP") { tokens.push_back({TokenType::STEP, ident}); }
