@@ -1,16 +1,21 @@
 #pragma once
-#include <string>
-#include <vector>
+
+#define MAX_TOKEN_LEN 128
+#define MAX_TOKENS_PER_LINE 128
 
 enum class TokenType {
     NUMBER,
-    IDENTIFIER, // Variables
+    IDENTIFIER,
     STRING,
-    
-    // Keywords
     PRINT,
-    DIM,
     LET,
+    ASSIGN,
+    PLUS,
+    MINUS,
+    MUL,
+    DIV,
+    LPAREN,
+    RPAREN,
     GOTO,
     GOSUB,
     RETURN,
@@ -27,30 +32,26 @@ enum class TokenType {
     READ,
     DATA,
     RESTORE,
-    
-    // Operators
-    PLUS,       // +
-    MINUS,      // -
-    MUL,        // *
-    DIV,        // /
-    ASSIGN,     // = (Also used for equals)
-    LPAREN,     // (
-    RPAREN,     // )
-    
-    // Relational
-    GT,         // >
-    LT,         // <
-    GTE,        // >=
-    LTE,        // <=
-    NEQ,        // <>
-    COMMA,      // ,
-    
+    DIM,
+    GT,
+    LT,
+    GTE,
+    LTE,
+    NEQ,
+    COMMA,
     END_OF_FILE
 };
 
 struct Token {
     TokenType type;
-    std::string text;
+    char text[MAX_TOKEN_LEN];
 };
 
-std::vector<Token> lex(const std::string& source);
+struct TokenList {
+    Token tokens[MAX_TOKENS_PER_LINE];
+    int size;
+
+    TokenList() : size(0) {}
+};
+
+TokenList lex(const char* source);

@@ -1,10 +1,8 @@
 #pragma once
 #include "lexer.h"
-#include <vector>
-#include <string>
 
-void parse_and_execute(const std::vector<Token>& tokens);
-void store_line(int line_number, const std::vector<Token>& tokens);
-void run_program(int max_steps = -1);
-void clear_program();
+void parse_and_execute(const TokenList& tokens);
+void store_line(int line_number, const TokenList& tokens);
 void list_program();
+void clear_program();
+void run_program(int max_steps = -1);

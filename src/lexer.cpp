@@ -1,104 +1,145 @@
 #include "lexer.h"
 #include <cctype>
+#include <cstring>
+#include <cstdio>
 
-std::vector<Token> lex(const std::string& source) {
-    std::vector<Token> tokens;
-    size_t i = 0;
+TokenList lex(const char* source) {
+    TokenList token_list;
+    int pos = 0;
+    int len = strlen(source);
 
-    while (i < source.length()) {
-        char c = source[i];
+    while (pos < len) {
+        if (token_list.size >= MAX_TOKENS_PER_LINE) break;
+
+        char c = source[pos];
 
         if (std::isspace(c)) {
-            i++;
+            pos++;
             continue;
         }
 
-        // Handle double-quote strings
+        if (c == '<' && pos + 1 < len && source[pos+1] == '>') {
+            token_list.tokens[token_list.size].type = TokenType::NEQ;
+            strcpy(token_list.tokens[token_list.size].text, "<>");
+            token_list.size++;
+            pos += 2;
+            continue;
+        }
+        if (c == '<' && pos + 1 < len && source[pos+1] == '=') {
+            token_list.tokens[token_list.size].type = TokenType::LTE;
+            strcpy(token_list.tokens[token_list.size].text, "<=");
+            token_list.size++;
+            pos += 2;
+            continue;
+        }
+        if (c == '>' && pos + 1 < len && source[pos+1] == '=') {
+            token_list.tokens[token_list.size].type = TokenType::GTE;
+            strcpy(token_list.tokens[token_list.size].text, ">=");
+            token_list.size++;
+            pos += 2;
+            continue;
+        }
+
+        if (c == '=') { token_list.tokens[token_list.size] = {TokenType::ASSIGN, "="}; token_list.size++; pos++; continue; }
+        if (c == '+') { token_list.tokens[token_list.size] = {TokenType::PLUS, "+"}; token_list.size++; pos++; continue; }
+        if (c == '-') { token_list.tokens[token_list.size] = {TokenType::MINUS, "-"}; token_list.size++; pos++; continue; }
+        if (c == '*') { token_list.tokens[token_list.size] = {TokenType::MUL, "*"}; token_list.size++; pos++; continue; }
+        if (c == '/') { token_list.tokens[token_list.size] = {TokenType::DIV, "/"}; token_list.size++; pos++; continue; }
+        if (c == '(') { token_list.tokens[token_list.size] = {TokenType::LPAREN, "("}; token_list.size++; pos++; continue; }
+        if (c == ')') { token_list.tokens[token_list.size] = {TokenType::RPAREN, ")"}; token_list.size++; pos++; continue; }
+        if (c == '>') { token_list.tokens[token_list.size] = {TokenType::GT, ">"}; token_list.size++; pos++; continue; }
+        if (c == '<') { token_list.tokens[token_list.size] = {TokenType::LT, "<"}; token_list.size++; pos++; continue; }
+        if (c == ',') { token_list.tokens[token_list.size] = {TokenType::COMMA, ","}; token_list.size++; pos++; continue; }
+
         if (c == '"') {
-            std::string str_val = "";
-            i++; // skip opening quote
-            while (i < source.length() && source[i] != '"') {
-                str_val += source[i];
-                i++;
+            pos++;
+            int start = pos;
+            while (pos < len && source[pos] != '"') pos++;
+            
+            Token t;
+            t.type = TokenType::STRING;
+            int text_len = pos - start;
+            if (text_len >= MAX_TOKEN_LEN) text_len = MAX_TOKEN_LEN - 1;
+            strncpy(t.text, source + start, text_len);
+            t.text[text_len] = '\0';
+            token_list.tokens[token_list.size++] = t;
+            
+            if (pos < len && source[pos] == '"') pos++;
+            continue;
+        }
+
+        if (std::isdigit(c)) {
+            int start = pos;
+            bool has_dot = false;
+            while (pos < len && (std::isdigit(source[pos]) || source[pos] == '.')) {
+                if (source[pos] == '.') {
+                    if (has_dot) break;
+                    has_dot = true;
+                }
+                pos++;
             }
-            if (i < source.length()) {
-                i++; // skip closing quote
-            }
-            tokens.push_back({TokenType::STRING, str_val});
+            Token t;
+            t.type = TokenType::NUMBER;
+            int text_len = pos - start;
+            if (text_len >= MAX_TOKEN_LEN) text_len = MAX_TOKEN_LEN - 1;
+            strncpy(t.text, source + start, text_len);
+            t.text[text_len] = '\0';
+            token_list.tokens[token_list.size++] = t;
             continue;
         }
 
         if (std::isalpha(c)) {
-            std::string ident = "";
-            while (i < source.length() && std::isalnum(source[i])) {
-                ident += std::toupper(source[i]);
-                i++;
+            int start = pos;
+            while (pos < len && (std::isalnum(source[pos]) || source[pos] == '$')) {
+                pos++;
             }
-            // Optional $ suffix for string variables
-            if (i < source.length() && source[i] == '$') {
-                ident += '$';
-                i++;
-            }
-            
-            if (ident == "PRINT") { tokens.push_back({TokenType::PRINT, ident}); }
-            else if (ident == "DIM") { tokens.push_back({TokenType::DIM, ident}); }
-            else if (ident == "LET") { tokens.push_back({TokenType::LET, ident}); }
-            else if (ident == "GOTO") { tokens.push_back({TokenType::GOTO, ident}); }
-            else if (ident == "GOSUB") { tokens.push_back({TokenType::GOSUB, ident}); }
-            else if (ident == "RETURN") { tokens.push_back({TokenType::RETURN, ident}); }
-            else if (ident == "IF") { tokens.push_back({TokenType::IF, ident}); }
-            else if (ident == "THEN") { tokens.push_back({TokenType::THEN, ident}); }
-            else if (ident == "ELSE") { tokens.push_back({TokenType::ELSE, ident}); }
-            else if (ident == "FOR") { tokens.push_back({TokenType::FOR, ident}); }
-            else if (ident == "TO") { tokens.push_back({TokenType::TO, ident}); }
-            else if (ident == "STEP") { tokens.push_back({TokenType::STEP, ident}); }
-            else if (ident == "NEXT") { tokens.push_back({TokenType::NEXT, ident}); }
-            else if (ident == "NEW") { tokens.push_back({TokenType::NEW, ident}); }
-            else if (ident == "LIST") { tokens.push_back({TokenType::LIST, ident}); }
-            else if (ident == "RUN") { tokens.push_back({TokenType::RUN, ident}); }
-            else if (ident == "READ") { tokens.push_back({TokenType::READ, ident}); }
-            else if (ident == "DATA") { tokens.push_back({TokenType::DATA, ident}); }
-            else if (ident == "RESTORE") { tokens.push_back({TokenType::RESTORE, ident}); }
-            else { tokens.push_back({TokenType::IDENTIFIER, ident}); }
+            char ident[MAX_TOKEN_LEN];
+            int text_len = pos - start;
+            if (text_len >= MAX_TOKEN_LEN) text_len = MAX_TOKEN_LEN - 1;
+            strncpy(ident, source + start, text_len);
+            ident[text_len] = '\0';
+
+            // Convert to uppercase for keywords
+            char upper_ident[MAX_TOKEN_LEN];
+            for (int i = 0; i <= text_len; ++i) upper_ident[i] = std::toupper(ident[i]);
+
+            Token t;
+            t.type = TokenType::IDENTIFIER;
+            strncpy(t.text, upper_ident, MAX_TOKEN_LEN);
+
+            if (strcmp(upper_ident, "PRINT") == 0) t.type = TokenType::PRINT;
+            else if (strcmp(upper_ident, "LET") == 0) t.type = TokenType::LET;
+            else if (strcmp(upper_ident, "GOTO") == 0) t.type = TokenType::GOTO;
+            else if (strcmp(upper_ident, "GOSUB") == 0) t.type = TokenType::GOSUB;
+            else if (strcmp(upper_ident, "RETURN") == 0) t.type = TokenType::RETURN;
+            else if (strcmp(upper_ident, "IF") == 0) t.type = TokenType::IF;
+            else if (strcmp(upper_ident, "THEN") == 0) t.type = TokenType::THEN;
+            else if (strcmp(upper_ident, "ELSE") == 0) t.type = TokenType::ELSE;
+            else if (strcmp(upper_ident, "FOR") == 0) t.type = TokenType::FOR;
+            else if (strcmp(upper_ident, "TO") == 0) t.type = TokenType::TO;
+            else if (strcmp(upper_ident, "STEP") == 0) t.type = TokenType::STEP;
+            else if (strcmp(upper_ident, "NEXT") == 0) t.type = TokenType::NEXT;
+            else if (strcmp(upper_ident, "NEW") == 0) t.type = TokenType::NEW;
+            else if (strcmp(upper_ident, "LIST") == 0) t.type = TokenType::LIST;
+            else if (strcmp(upper_ident, "RUN") == 0) t.type = TokenType::RUN;
+            else if (strcmp(upper_ident, "READ") == 0) t.type = TokenType::READ;
+            else if (strcmp(upper_ident, "DATA") == 0) t.type = TokenType::DATA;
+            else if (strcmp(upper_ident, "RESTORE") == 0) t.type = TokenType::RESTORE;
+            else if (strcmp(upper_ident, "DIM") == 0) t.type = TokenType::DIM;
+
+            token_list.tokens[token_list.size++] = t;
             continue;
         }
 
-        if (std::isdigit(c) || c == '.') {
-            std::string num = "";
-            while (i < source.length() && (std::isdigit(source[i]) || source[i] == '.')) {
-                num += source[i];
-                i++;
-            }
-            tokens.push_back({TokenType::NUMBER, num});
-            continue;
-        }
-
-        // Multi-char relational operators
-        if (c == '<' && i + 1 < source.length()) {
-            if (source[i+1] == '=') { tokens.push_back({TokenType::LTE, "<="}); i+=2; continue; }
-            if (source[i+1] == '>') { tokens.push_back({TokenType::NEQ, "<>"}); i+=2; continue; }
-        }
-        if (c == '>' && i + 1 < source.length() && source[i+1] == '=') {
-            tokens.push_back({TokenType::GTE, ">="}); i+=2; continue;
-        }
-
-        // Single char operators
-        if (c == '>') { tokens.push_back({TokenType::GT, ">"}); i++; continue; }
-        if (c == '<') { tokens.push_back({TokenType::LT, "<"}); i++; continue; }
-
-        if (c == '+') { tokens.push_back({TokenType::PLUS, "+"}); i++; continue; }
-        if (c == '-') { tokens.push_back({TokenType::MINUS, "-"}); i++; continue; }
-        if (c == '*') { tokens.push_back({TokenType::MUL, "*"}); i++; continue; }
-        if (c == '/') { tokens.push_back({TokenType::DIV, "/"}); i++; continue; }
-        if (c == '=') { tokens.push_back({TokenType::ASSIGN, "="}); i++; continue; }
-        if (c == '(') { tokens.push_back({TokenType::LPAREN, "("}); i++; continue; }
-        if (c == ')') { tokens.push_back({TokenType::RPAREN, ")"}); i++; continue; }
-        if (c == ',') { tokens.push_back({TokenType::COMMA, ","}); i++; continue; }
-        
-        // Skip unknown characters
-        i++;
+        // Unknown character, skip it
+        pos++;
     }
-    
-    tokens.push_back({TokenType::END_OF_FILE, ""});
-    return tokens;
+
+    if (token_list.size < MAX_TOKENS_PER_LINE) {
+        token_list.tokens[token_list.size++] = {TokenType::END_OF_FILE, ""};
+    } else {
+        token_list.tokens[MAX_TOKENS_PER_LINE - 1] = {TokenType::END_OF_FILE, ""};
+    }
+
+    return token_list;
 }
