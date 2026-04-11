@@ -1,0 +1,45 @@
+# CMake and build artifacts
+build/
+build_host/
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+
+# Binaries and executables
+*.elf
+*.bin
+*.uf2
+*.hex
+*.a
+*.o
+*.so
+*.dylib
+*.exe
+basic_tests
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.cache/
+
+# FetchContent / Google Test dependencies
+_deps/
+
+# Downloaded tools
+cmake_tmp/
