@@ -52,12 +52,64 @@ static std::vector<Value> data_buffer;
 static int data_ptr = 0;
 
 // ---------------------------------------------------------
-// Recursive Descent Parser for Expressions
+// Foreward Declarations & Helpers
 // ---------------------------------------------------------
+static void execute_statement(const std::vector<Token>& tokens, size_t& pos);
 static Value parse_expression(const std::vector<Token>& tokens, size_t& pos);
 static Value parse_term(const std::vector<Token>& tokens, size_t& pos);
 static Value parse_factor(const std::vector<Token>& tokens, size_t& pos);
 static Value parse_relation(const std::vector<Token>& tokens, size_t& pos);
+
+static void require_token(const std::vector<Token>& tokens, size_t& pos, TokenType expected, const std::string& err_msg) {
+    if (pos >= tokens.size() || tokens[pos].type != expected) {
+        throw std::runtime_error(err_msg);
+    }
+}
+
+static bool is_builtin_function(const std::string& name) {
+    return name == "ABS" || name == "INT" || name == "RND" || name == "LEN" || name == "MID$" || name == "LEFT$";
+}
+
+static Value evaluate_builtin_function(const std::string& var_name, const std::vector<Value>& args) {
+    if (var_name == "ABS") {
+        if (args.size() != 1 || args[0].type != Value::Type::NUM) throw std::runtime_error("Type Mismatch/Arg Count in ABS");
+        return Value(std::abs(args[0].num_val));
+    } else if (var_name == "INT") {
+        if (args.size() != 1 || args[0].type != Value::Type::NUM) throw std::runtime_error("Type Mismatch/Arg Count in INT");
+        return Value(std::floor(args[0].num_val));
+    } else if (var_name == "RND") {
+        if (args.size() != 1 || args[0].type != Value::Type::NUM) throw std::runtime_error("Type Mismatch/Arg Count in RND");
+        float scale = args[0].num_val;
+        float r = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+        return Value(r * scale);
+    } else if (var_name == "LEN") {
+        if (args.size() != 1 || args[0].type != Value::Type::STR) throw std::runtime_error("Type Mismatch/Arg Count in LEN");
+        return Value(static_cast<float>(args[0].str_val.length()));
+    } else if (var_name == "MID$") {
+        if (args.size() != 3 || args[0].type != Value::Type::STR || args[1].type != Value::Type::NUM || args[2].type != Value::Type::NUM)
+            throw std::runtime_error("Type Mismatch/Arg Count in MID$");
+        int start = static_cast<int>(args[1].num_val) - 1; // BASIC strings are 1-indexed
+        int len = static_cast<int>(args[2].num_val);
+        std::string s = args[0].str_val;
+        if (start < 0) start = 0;
+        if (len < 0) len = 0;
+        if (start >= s.length()) return Value(std::string(""));
+        return Value(s.substr(start, len));
+    } else if (var_name == "LEFT$") {
+        if (args.size() != 2 || args[0].type != Value::Type::STR || args[1].type != Value::Type::NUM)
+            throw std::runtime_error("Type Mismatch/Arg Count in LEFT$");
+        int len = static_cast<int>(args[1].num_val);
+        std::string s = args[0].str_val;
+        if (len < 0) len = 0;
+        if (len >= s.length()) return Value(s);
+        return Value(s.substr(0, len));
+    }
+    throw std::runtime_error("Unknown Function");
+}
+
+// ---------------------------------------------------------
+// Recursive Descent Parser for Expressions
+// ---------------------------------------------------------
 
 static Value parse_factor(const std::vector<Token>& tokens, size_t& pos) {
     if (pos >= tokens.size()) return Value(0.0f);
@@ -85,7 +137,7 @@ static Value parse_factor(const std::vector<Token>& tokens, size_t& pos) {
         std::string var_name = t.text;
         pos++;
         
-        // Array Access or Function Call: RND(1), MID$(A$, 1, 2), A(idx)
+        // Array Access or Function Call: RND(1), A(idx)
         if (pos < tokens.size() && tokens[pos].type == TokenType::LPAREN) {
             pos++; // skip '('
             std::vector<Value> args;
@@ -94,45 +146,12 @@ static Value parse_factor(const std::vector<Token>& tokens, size_t& pos) {
                 pos++;
                 args.push_back(parse_relation(tokens, pos));
             }
-            if (pos < tokens.size() && tokens[pos].type == TokenType::RPAREN) {
-                pos++; // skip ')'
-            } else {
-                throw std::runtime_error("Syntax Error: Expected ')' for function or array");
-            }
+            require_token(tokens, pos, TokenType::RPAREN, "Syntax Error: Expected ')' for function or array");
+            pos++; // skip ')'
             
             // Built-in functions
-            if (var_name == "ABS") {
-                if (args.size() != 1 || args[0].type != Value::Type::NUM) throw std::runtime_error("Type Mismatch/Arg Count in ABS");
-                return Value(std::abs(args[0].num_val));
-            } else if (var_name == "INT") {
-                if (args.size() != 1 || args[0].type != Value::Type::NUM) throw std::runtime_error("Type Mismatch/Arg Count in INT");
-                return Value(std::floor(args[0].num_val));
-            } else if (var_name == "RND") {
-                if (args.size() != 1 || args[0].type != Value::Type::NUM) throw std::runtime_error("Type Mismatch/Arg Count in RND");
-                float scale = args[0].num_val;
-                float r = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
-                return Value(r * scale);
-            } else if (var_name == "LEN") {
-                if (args.size() != 1 || args[0].type != Value::Type::STR) throw std::runtime_error("Type Mismatch/Arg Count in LEN");
-                return Value(static_cast<float>(args[0].str_val.length()));
-            } else if (var_name == "MID$") {
-                if (args.size() != 3 || args[0].type != Value::Type::STR || args[1].type != Value::Type::NUM || args[2].type != Value::Type::NUM)
-                    throw std::runtime_error("Type Mismatch/Arg Count in MID$");
-                int start = static_cast<int>(args[1].num_val) - 1; // BASIC arrays/strings are usually 1-indexed
-                int len = static_cast<int>(args[2].num_val);
-                std::string s = args[0].str_val;
-                if (start < 0) start = 0;
-                if (len < 0) len = 0;
-                if (start >= s.length()) return Value(std::string(""));
-                return Value(s.substr(start, len));
-            } else if (var_name == "LEFT$") {
-                if (args.size() != 2 || args[0].type != Value::Type::STR || args[1].type != Value::Type::NUM)
-                    throw std::runtime_error("Type Mismatch/Arg Count in LEFT$");
-                int len = static_cast<int>(args[1].num_val);
-                std::string s = args[0].str_val;
-                if (len < 0) len = 0;
-                if (len >= s.length()) return Value(s);
-                return Value(s.substr(0, len));
+            if (is_builtin_function(var_name)) {
+                return evaluate_builtin_function(var_name, args);
             }
 
             // Fallback: Array lookup
@@ -151,22 +170,16 @@ static Value parse_factor(const std::vector<Token>& tokens, size_t& pos) {
         
         // Scalar variable
         if (variables.find(var_name) == variables.end()) {
-            if (!var_name.empty() && var_name.back() == '$') {
-                return Value(std::string(""));
-            } else {
-                return Value(0.0f);
-            }
+            if (!var_name.empty() && var_name.back() == '$') return Value(std::string(""));
+            return Value(0.0f);
         }
         return variables[var_name];
     }
     if (t.type == TokenType::LPAREN) {
         pos++; 
         Value val = parse_relation(tokens, pos);
-        if (pos < tokens.size() && tokens[pos].type == TokenType::RPAREN) {
-            pos++;
-        } else {
-            throw std::runtime_error("Missing closing parenthesis");
-        }
+        require_token(tokens, pos, TokenType::RPAREN, "Missing closing parenthesis");
+        pos++;
         return val;
     }
     throw std::runtime_error("Syntax Error in expression");
@@ -251,7 +264,6 @@ static Value parse_relation(const std::vector<Token>& tokens, size_t& pos) {
                 else if (op == TokenType::LTE) result = (a <= b);
                 else if (op == TokenType::NEQ) result = (a != b);
             }
-            
             val = Value(result ? 1.0f : 0.0f);
         } else {
             break;
@@ -261,283 +273,258 @@ static Value parse_relation(const std::vector<Token>& tokens, size_t& pos) {
 }
 
 // ---------------------------------------------------------
-// Statement Execution Core
+// Statement Execution Core (Delegates)
 // ---------------------------------------------------------
-static void execute_statement(const std::vector<Token>& tokens, size_t& pos) {
-    if (pos >= tokens.size() || tokens[pos].type == TokenType::END_OF_FILE) return;
 
-    if (tokens[pos].type == TokenType::PRINT) {
-        pos++;
-        std::string output = "";
-        while (pos < tokens.size() && tokens[pos].type != TokenType::END_OF_FILE) {
-            Value result = parse_relation(tokens, pos);
-            output += result.to_string() + "\t"; // BASIC often uses tab or space for commas
-            if (pos < tokens.size() && tokens[pos].type == TokenType::COMMA) {
-                pos++;
-            } else {
-                break;
-            }
-        }
-        // Remove trailing tab if not empty to make test matching easier
-        if (!output.empty() && output.back() == '\t') output.pop_back();
-        output += "\n";
-        printf("%s", output.c_str());
-        hal_display_print(output);
-    } 
-    else if (tokens[pos].type == TokenType::DATA) {
-        // DATA is pre-processed before RUN, so skip it at runtime
-        pos = tokens.size();
-    }
-    else if (tokens[pos].type == TokenType::RESTORE) {
-        pos++;
-        data_ptr = 0;
-    }
-    else if (tokens[pos].type == TokenType::READ) {
-        pos++;
-        while (pos < tokens.size() && tokens[pos].type != TokenType::END_OF_FILE) {
-            std::string var_name;
-            int arr_idx = -1;
-            
-            if (tokens[pos].type == TokenType::IDENTIFIER) {
-                var_name = tokens[pos].text;
-                pos++;
-            } else {
-                throw std::runtime_error("Syntax Error: READ expects identifier");
-            }
-            
-            // Array indexing
-            if (pos < tokens.size() && tokens[pos].type == TokenType::LPAREN) {
-                pos++;
-                Value idx_val = parse_relation(tokens, pos);
-                if (idx_val.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: Array index");
-                if (pos < tokens.size() && tokens[pos].type == TokenType::RPAREN) {
-                    pos++;
-                    arr_idx = static_cast<int>(idx_val.num_val);
-                } else throw std::runtime_error("Syntax Error: Expected ')'");
-            }
-            
-            if (data_ptr >= data_buffer.size()) {
-                throw std::runtime_error("Out of DATA");
-            }
-            Value val = data_buffer[data_ptr++];
-            
-            bool is_str_var = (!var_name.empty() && var_name.back() == '$');
-            if (is_str_var && val.type != Value::Type::STR) throw std::runtime_error("Type Mismatch in READ (Expected String)");
-            if (!is_str_var && val.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch in READ (Expected Number)");
-            
-            if (arr_idx >= 0) {
-                 if (arrays.find(var_name) == arrays.end()) throw std::runtime_error("Array not dimensioned");
-                 if (arr_idx < 0 || arr_idx >= arrays[var_name].size()) throw std::runtime_error("Out of bounds");
-                 arrays[var_name][arr_idx] = val;
-            } else {
-                 variables[var_name] = val;
-            }
-            
-            if (pos < tokens.size() && tokens[pos].type == TokenType::COMMA) {
-                pos++;
-            } else {
-                break;
-            }
-        }
-    }
-    else if (tokens[pos].type == TokenType::GOTO) {
-        pos++;
-        Value line_to_go = parse_relation(tokens, pos);
-        if (line_to_go.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: GOTO requires number");
-        current_line = static_cast<int>(line_to_go.num_val);
-        if (program_lines.find(current_line) == program_lines.end()) {
-            throw std::runtime_error("GOTO target line not found");
-        }
-        branch_taken = true;
-    }
-    else if (tokens[pos].type == TokenType::GOSUB) {
-        pos++;
-        Value line_to_go = parse_relation(tokens, pos);
-        if (line_to_go.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: GOSUB requires number");
-        int target = static_cast<int>(line_to_go.num_val);
-        if (program_lines.find(target) == program_lines.end()) {
-            throw std::runtime_error("GOSUB target line not found");
-        }
-        call_stack.push_back(current_line);
-        current_line = target;
-        branch_taken = true;
-    }
-    else if (tokens[pos].type == TokenType::RETURN) {
-        pos++;
-        if (call_stack.empty()) throw std::runtime_error("RETURN WITHOUT GOSUB");
-        int returned_from = call_stack.back();
-        call_stack.pop_back();
-        auto it = program_lines.find(returned_from);
-        if (it != program_lines.end()) {
-            auto next_it = std::next(it);
-            if (next_it != program_lines.end()) {
-                current_line = next_it->first;
-                branch_taken = true;
-            } else {
-                current_line = -1;
-                branch_taken = true;
-            }
-        } else {
-            throw std::runtime_error("Original line disappeared during GOSUB");
-        }
-    }
-    else if (tokens[pos].type == TokenType::IF) {
-        pos++;
-        Value condition_result = parse_relation(tokens, pos);
-        if (condition_result.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: IF condition must be numeric");
-        
-        if (pos < tokens.size() && tokens[pos].type == TokenType::THEN) {
+static void execute_print(const std::vector<Token>& tokens, size_t& pos) {
+    pos++; // skip PRINT
+    std::string output = "";
+    while (pos < tokens.size() && tokens[pos].type != TokenType::END_OF_FILE) {
+        Value result = parse_relation(tokens, pos);
+        output += result.to_string() + "\t"; // basic outputs tab
+        if (pos < tokens.size() && tokens[pos].type == TokenType::COMMA) {
             pos++;
-            if (condition_result.num_val != 0.0f) {
-                execute_statement(tokens, pos);
-                // Skip ELSE if it exists because THEN was taken
-                if (pos < tokens.size() && tokens[pos].type == TokenType::ELSE) {
-                    pos = tokens.size();
-                }
-            } else {
-                // Skip until ELSE or EOF
-                while (pos < tokens.size() && tokens[pos].type != TokenType::ELSE && tokens[pos].type != TokenType::END_OF_FILE) {
-                    pos++;
-                }
-                if (pos < tokens.size() && tokens[pos].type == TokenType::ELSE) {
-                    pos++; // Consume ELSE
-                    execute_statement(tokens, pos);
-                }
-            }
         } else {
-            throw std::runtime_error("Syntax Error: Missing THEN in IF statement");
+            break;
         }
     }
-    else if (tokens[pos].type == TokenType::FOR) {
+    if (!output.empty() && output.back() == '\t') output.pop_back();
+    output += "\n";
+    printf("%s", output.c_str());
+    hal_display_print(output);
+}
+
+static void execute_read(const std::vector<Token>& tokens, size_t& pos) {
+    pos++; // skip READ
+    while (pos < tokens.size() && tokens[pos].type != TokenType::END_OF_FILE) {
+        require_token(tokens, pos, TokenType::IDENTIFIER, "Syntax Error: READ expects identifier");
+        std::string var_name = tokens[pos].text;
         pos++;
-        if (pos < tokens.size() && tokens[pos].type == TokenType::IDENTIFIER) {
-            std::string var_name = tokens[pos].text;
-            pos++;
-            if (pos < tokens.size() && tokens[pos].type == TokenType::ASSIGN) {
-                pos++;
-                Value start_val = parse_relation(tokens, pos);
-                if (start_val.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: FOR start value");
-                
-                if (pos < tokens.size() && tokens[pos].type == TokenType::TO) {
-                    pos++;
-                    Value end_val = parse_relation(tokens, pos);
-                    if (end_val.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: FOR end value");
-                    
-                    float step_val = 1.0f;
-                    if (pos < tokens.size() && tokens[pos].type == TokenType::STEP) {
-                        pos++;
-                        Value step_v = parse_relation(tokens, pos);
-                        if (step_v.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: FOR step value");
-                        step_val = step_v.num_val;
-                    }
-                    
-                    variables[var_name] = start_val;
-                    for_stack.push_back({var_name, end_val.num_val, step_val, current_line, pos});
-                } else {
-                    throw std::runtime_error("Syntax Error: Expected TO in FOR");
-                }
-            } else {
-                throw std::runtime_error("Syntax Error: Expected '=' in FOR");
-            }
-        } else {
-            throw std::runtime_error("Syntax Error: Expected Identifier in FOR");
-        }
-    }
-    else if (tokens[pos].type == TokenType::NEXT) {
-        pos++;
-        if (!for_stack.empty()) {
-            std::string var_name = "";
-            if (pos < tokens.size() && tokens[pos].type == TokenType::IDENTIFIER) {
-                var_name = tokens[pos].text;
-                pos++;
-            }
-            
-            auto& ctx = for_stack.back();
-            if (!var_name.empty() && ctx.var_name != var_name) throw std::runtime_error("NEXT variable does not match FOR");
-            
-            variables[ctx.var_name].num_val += ctx.step;
-            
-            bool cont = (ctx.step > 0) ? (variables[ctx.var_name].num_val <= ctx.target) 
-                                       : (variables[ctx.var_name].num_val >= ctx.target);
-            if (cont) {
-                branch_taken = true;
-                auto it = program_lines.find(ctx.loop_start_line);
-                if (it != program_lines.end()) {
-                    auto next_it = std::next(it);
-                    if (next_it != program_lines.end()) {
-                        current_line = next_it->first;
-                    } else throw std::runtime_error("No line after FOR");
-                }
-            } else {
-                for_stack.pop_back();
-            }
-        } else {
-            throw std::runtime_error("NEXT without FOR");
-        }
-    }
-    else if (tokens[pos].type == TokenType::DIM) {
-        pos++;
-        if (pos < tokens.size() && tokens[pos].type == TokenType::IDENTIFIER) {
-            std::string var_name = tokens[pos].text;
-            pos++;
-            if (pos < tokens.size() && tokens[pos].type == TokenType::LPAREN) {
-                pos++;
-                Value size_val = parse_relation(tokens, pos);
-                if (size_val.type != Value::Type::NUM || size_val.num_val < 0) throw std::runtime_error("Syntax Error: Invalid Array Size");
-                
-                if (pos < tokens.size() && tokens[pos].type == TokenType::RPAREN) {
-                    pos++;
-                    int arr_size = static_cast<int>(size_val.num_val) + 1;
-                    Value default_val = (!var_name.empty() && var_name.back() == '$') ? Value(std::string("")) : Value(0.0f);
-                    arrays[var_name] = std::vector<Value>(arr_size, default_val);
-                } else throw std::runtime_error("Syntax Error: Expected ')' in DIM");
-            } else throw std::runtime_error("Syntax Error: Expected '(' after DIM variable");
-        } else throw std::runtime_error("Syntax Error: Expected identifier after DIM");
-    }
-    else if (tokens[pos].type == TokenType::LET || tokens[pos].type == TokenType::IDENTIFIER) {
-        std::string var_name;
-        if (tokens[pos].type == TokenType::LET) {
-            pos++;
-            if (pos < tokens.size() && tokens[pos].type == TokenType::IDENTIFIER) {
-                var_name = tokens[pos].text;
-                pos++;
-            } else throw std::runtime_error("Syntax Error: Expected identifier after LET");
-        } else {
-            var_name = tokens[pos].text;
-            pos++;
-        }
         
         int arr_idx = -1;
         if (pos < tokens.size() && tokens[pos].type == TokenType::LPAREN) {
             pos++;
             Value idx_val = parse_relation(tokens, pos);
             if (idx_val.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: Array index");
-            if (pos < tokens.size() && tokens[pos].type == TokenType::RPAREN) {
-                pos++;
-                arr_idx = static_cast<int>(idx_val.num_val);
-            } else throw std::runtime_error("Syntax Error: Expected ')'");
+            require_token(tokens, pos, TokenType::RPAREN, "Syntax Error: Expected ')'");
+            pos++;
+            arr_idx = static_cast<int>(idx_val.num_val);
         }
         
-        if (pos < tokens.size() && tokens[pos].type == TokenType::ASSIGN) {
-            pos++;
-            Value result = parse_relation(tokens, pos);
-            
-            bool is_str_var = (!var_name.empty() && var_name.back() == '$');
-            if (is_str_var && result.type != Value::Type::STR) throw std::runtime_error("Type Mismatch: Assigning NUM to STR variable");
-            if (!is_str_var && result.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: Assigning STR to NUM variable");
-
-            if (arr_idx >= 0) {
-                if (arrays.find(var_name) == arrays.end()) throw std::runtime_error("Array not dimensioned: " + var_name);
-                if (arr_idx < 0 || arr_idx >= arrays[var_name].size()) throw std::runtime_error("Out of bounds");
-                arrays[var_name][arr_idx] = result;
-            } else {
-                variables[var_name] = result;
-            }
+        if (data_ptr >= data_buffer.size()) throw std::runtime_error("Out of DATA");
+        Value val = data_buffer[data_ptr++];
+        
+        bool is_str_var = (!var_name.empty() && var_name.back() == '$');
+        if (is_str_var && val.type != Value::Type::STR) throw std::runtime_error("Type Mismatch in READ (Expected String)");
+        if (!is_str_var && val.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch in READ (Expected Number)");
+        
+        if (arr_idx >= 0) {
+            if (arrays.find(var_name) == arrays.end()) throw std::runtime_error("Array not dimensioned");
+            if (arr_idx < 0 || arr_idx >= arrays[var_name].size()) throw std::runtime_error("Out of bounds");
+            arrays[var_name][arr_idx] = val;
         } else {
-            throw std::runtime_error("Syntax Error: Expected assignment");
+            variables[var_name] = val;
+        }
+        
+        if (pos < tokens.size() && tokens[pos].type == TokenType::COMMA) { pos++; } else { break; }
+    }
+}
+
+static void execute_goto(const std::vector<Token>& tokens, size_t& pos) {
+    pos++; // skip GOTO
+    Value line_to_go = parse_relation(tokens, pos);
+    if (line_to_go.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: GOTO requires number");
+    current_line = static_cast<int>(line_to_go.num_val);
+    if (program_lines.find(current_line) == program_lines.end()) {
+        throw std::runtime_error("GOTO target line not found");
+    }
+    branch_taken = true;
+}
+
+static void execute_gosub(const std::vector<Token>& tokens, size_t& pos) {
+    pos++; // skip GOSUB
+    Value line_to_go = parse_relation(tokens, pos);
+    if (line_to_go.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: GOSUB requires number");
+    int target = static_cast<int>(line_to_go.num_val);
+    if (program_lines.find(target) == program_lines.end()) {
+        throw std::runtime_error("GOSUB target line not found");
+    }
+    call_stack.push_back(current_line);
+    current_line = target;
+    branch_taken = true;
+}
+
+static void execute_return(const std::vector<Token>& tokens, size_t& pos) {
+    pos++; // skip RETURN
+    if (call_stack.empty()) throw std::runtime_error("RETURN WITHOUT GOSUB");
+    int returned_from = call_stack.back();
+    call_stack.pop_back();
+    auto it = program_lines.find(returned_from);
+    if (it != program_lines.end()) {
+        auto next_it = std::next(it);
+        if (next_it != program_lines.end()) {
+            current_line = next_it->first;
+            branch_taken = true;
+        } else {
+            current_line = -1;
+            branch_taken = true;
         }
     } else {
-        throw std::runtime_error("Syntax Error: Unrecognized statement");
+        throw std::runtime_error("Original line disappeared during GOSUB");
+    }
+}
+
+static void execute_if(const std::vector<Token>& tokens, size_t& pos) {
+    pos++; // skip IF
+    Value condition_result = parse_relation(tokens, pos);
+    if (condition_result.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: IF condition must be numeric");
+    
+    require_token(tokens, pos, TokenType::THEN, "Syntax Error: Missing THEN in IF statement");
+    pos++; // skip THEN
+    
+    if (condition_result.num_val != 0.0f) {
+        execute_statement(tokens, pos);
+        // Skip ELSE block if it exists
+        if (pos < tokens.size() && tokens[pos].type == TokenType::ELSE) pos = tokens.size();
+    } else {
+        // Skip until ELSE or EOF
+        while (pos < tokens.size() && tokens[pos].type != TokenType::ELSE && tokens[pos].type != TokenType::END_OF_FILE) { pos++; }
+        if (pos < tokens.size() && tokens[pos].type == TokenType::ELSE) {
+            pos++; // Consume ELSE
+            execute_statement(tokens, pos);
+        }
+    }
+}
+
+static void execute_for(const std::vector<Token>& tokens, size_t& pos) {
+    pos++; // skip FOR
+    require_token(tokens, pos, TokenType::IDENTIFIER, "Syntax Error: Expected Identifier in FOR");
+    std::string var_name = tokens[pos].text;
+    pos++;
+
+    require_token(tokens, pos, TokenType::ASSIGN, "Syntax Error: Expected '=' in FOR");
+    pos++;
+    Value start_val = parse_relation(tokens, pos);
+    if (start_val.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: FOR start value");
+    
+    require_token(tokens, pos, TokenType::TO, "Syntax Error: Expected TO in FOR");
+    pos++;
+    Value end_val = parse_relation(tokens, pos);
+    if (end_val.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: FOR end value");
+    
+    float step_val = 1.0f;
+    if (pos < tokens.size() && tokens[pos].type == TokenType::STEP) {
+        pos++;
+        Value step_v = parse_relation(tokens, pos);
+        if (step_v.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: FOR step value");
+        step_val = step_v.num_val;
+    }
+    
+    variables[var_name] = start_val;
+    for_stack.push_back({var_name, end_val.num_val, step_val, current_line, pos});
+}
+
+static void execute_next(const std::vector<Token>& tokens, size_t& pos) {
+    pos++; // skip NEXT
+    if (for_stack.empty()) throw std::runtime_error("NEXT without FOR");
+    
+    std::string var_name = "";
+    if (pos < tokens.size() && tokens[pos].type == TokenType::IDENTIFIER) {
+        var_name = tokens[pos].text;
+        pos++;
+    }
+    
+    auto& ctx = for_stack.back();
+    if (!var_name.empty() && ctx.var_name != var_name) throw std::runtime_error("NEXT variable does not match FOR");
+    
+    variables[ctx.var_name].num_val += ctx.step;
+    
+    bool cont = (ctx.step > 0) ? (variables[ctx.var_name].num_val <= ctx.target) 
+                                : (variables[ctx.var_name].num_val >= ctx.target);
+    if (cont) {
+        branch_taken = true;
+        auto it = program_lines.find(ctx.loop_start_line);
+        if (it != program_lines.end() && std::next(it) != program_lines.end()) {
+            current_line = std::next(it)->first;
+        } else throw std::runtime_error("No line after FOR");
+    } else {
+        for_stack.pop_back();
+    }
+}
+
+static void execute_dim(const std::vector<Token>& tokens, size_t& pos) {
+    pos++; // skip DIM
+    require_token(tokens, pos, TokenType::IDENTIFIER, "Syntax Error: Expected identifier after DIM");
+    std::string var_name = tokens[pos].text;
+    pos++;
+    
+    require_token(tokens, pos, TokenType::LPAREN, "Syntax Error: Expected '(' after DIM variable");
+    pos++;
+    Value size_val = parse_relation(tokens, pos);
+    if (size_val.type != Value::Type::NUM || size_val.num_val < 0) throw std::runtime_error("Syntax Error: Invalid Array Size");
+    
+    require_token(tokens, pos, TokenType::RPAREN, "Syntax Error: Expected ')' in DIM");
+    pos++;
+    int arr_size = static_cast<int>(size_val.num_val) + 1;
+    Value default_val = (!var_name.empty() && var_name.back() == '$') ? Value(std::string("")) : Value(0.0f);
+    arrays[var_name] = std::vector<Value>(arr_size, default_val);
+}
+
+static void execute_assignment(const std::vector<Token>& tokens, size_t& pos, bool explicit_let) {
+    std::string var_name;
+    if (explicit_let) {
+        pos++;
+        require_token(tokens, pos, TokenType::IDENTIFIER, "Syntax Error: Expected identifier after LET");
+    }
+    var_name = tokens[pos].text;
+    pos++;
+    
+    int arr_idx = -1;
+    if (pos < tokens.size() && tokens[pos].type == TokenType::LPAREN) {
+        pos++;
+        Value idx_val = parse_relation(tokens, pos);
+        if (idx_val.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: Array index");
+        require_token(tokens, pos, TokenType::RPAREN, "Syntax Error: Expected ')'");
+        pos++;
+        arr_idx = static_cast<int>(idx_val.num_val);
+    }
+    
+    require_token(tokens, pos, TokenType::ASSIGN, "Syntax Error: Expected assignment");
+    pos++;
+    Value result = parse_relation(tokens, pos);
+    
+    bool is_str_var = (!var_name.empty() && var_name.back() == '$');
+    if (is_str_var && result.type != Value::Type::STR) throw std::runtime_error("Type Mismatch: Assigning NUM to STR variable");
+    if (!is_str_var && result.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: Assigning STR to NUM variable");
+
+    if (arr_idx >= 0) {
+        if (arrays.find(var_name) == arrays.end()) throw std::runtime_error("Array not dimensioned: " + var_name);
+        if (arr_idx < 0 || arr_idx >= arrays[var_name].size()) throw std::runtime_error("Out of bounds");
+        arrays[var_name][arr_idx] = result;
+    } else {
+        variables[var_name] = result;
+    }
+}
+
+// Switchboard
+static void execute_statement(const std::vector<Token>& tokens, size_t& pos) {
+    if (pos >= tokens.size() || tokens[pos].type == TokenType::END_OF_FILE) return;
+
+    switch (tokens[pos].type) {
+        case TokenType::PRINT:   execute_print(tokens, pos); break;
+        case TokenType::DATA:    pos = tokens.size(); break; // Skip DATA at runtime
+        case TokenType::RESTORE: pos++; data_ptr = 0; break;
+        case TokenType::READ:    execute_read(tokens, pos); break;
+        case TokenType::GOTO:    execute_goto(tokens, pos); break;
+        case TokenType::GOSUB:   execute_gosub(tokens, pos); break;
+        case TokenType::RETURN:  execute_return(tokens, pos); break;
+        case TokenType::IF:      execute_if(tokens, pos); break;
+        case TokenType::FOR:     execute_for(tokens, pos); break;
+        case TokenType::NEXT:    execute_next(tokens, pos); break;
+        case TokenType::DIM:     execute_dim(tokens, pos); break;
+        case TokenType::LET:     execute_assignment(tokens, pos, true); break;
+        case TokenType::IDENTIFIER: execute_assignment(tokens, pos, false); break;
+        default: throw std::runtime_error("Syntax Error: Unrecognized statement");
     }
 }
 
@@ -606,14 +593,9 @@ void run_program(int max_steps) {
         if (!toks.empty() && toks[0].type == TokenType::DATA) {
             size_t pos = 1;
             while (pos < toks.size() && toks[pos].type != TokenType::END_OF_FILE) {
-                // Constants only via expression parsing
                 data_buffer.push_back(parse_relation(toks, pos));
-                if (pos < toks.size() && toks[pos].type == TokenType::COMMA) {
-                    pos++;
-                } else if (pos < toks.size() && toks[pos].type != TokenType::END_OF_FILE) {
-                    // Ignore remaining garbage on DATA line if any or throw, letting it skip is safer
-                    break;
-                }
+                if (pos < toks.size() && toks[pos].type == TokenType::COMMA) pos++;
+                else if (pos < toks.size() && toks[pos].type != TokenType::END_OF_FILE) break;
             }
         }
     }

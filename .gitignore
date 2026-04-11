@@ -43,3 +43,7 @@ _deps/
 
 # Downloaded tools
 cmake_tmp/
+
+# AI Agent local settings
+.agent/local_context.md
+
