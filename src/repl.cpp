@@ -3,21 +3,27 @@
 #include "lexer.h"
 #include "parser.h"
 #include <stdio.h>
-#include <string>
+#include <cstring>
+
+#define MAX_LINE_LEN 256
 
 void repl_start() {
-    std::string input_line;
+    static char input_buffer[MAX_LINE_LEN];
+    int input_ptr = 0;
     
     // Output initial startup banner
-    printf("Pico-HuBASIC v2.0\n");
-    hal_display_print("Pico-HuBASIC v2.0\n");
+    const char* banner = "Pico-HuBASIC v2.0\n";
+    printf("%s", banner);
+    hal_display_print(banner);
 
     while (true) {
-        printf("Ready\n");
-        hal_display_print("Ready\n");
+        const char* ready = "Ready\n";
+        printf("%s", ready);
+        hal_display_print(ready);
         
         // Wait for a full line of input
-        input_line.clear();
+        input_ptr = 0;
+        memset(input_buffer, 0, MAX_LINE_LEN);
         
         while (true) {
             int c = getchar(); // USB CDC Blocking Input
@@ -32,24 +38,28 @@ void repl_start() {
                 hal_display_print("\n");
                 break;
             } else if (c == '\b' || c == 127) { // Backspace
-                if (!input_line.empty()) {
-                    input_line.pop_back();
+                if (input_ptr > 0) {
+                    input_ptr--;
+                    input_buffer[input_ptr] = '\0';
                     printf("\b \b");
                     // Assuming hal_display_print supports backspace, or we redraw the line
                 }
             } else if (c >= 32 && c <= 126) {
-                input_line += static_cast<char>(c);
-                putchar(c); // Echo back
-                
-                // Echo to LCD
-                std::string s(1, static_cast<char>(c));
-                hal_display_print(s);
+                if (input_ptr < MAX_LINE_LEN - 1) {
+                    input_buffer[input_ptr++] = static_cast<char>(c);
+                    input_buffer[input_ptr] = '\0';
+                    putchar(c); // Echo back
+                    
+                    // Echo to LCD
+                    char s[2] = {static_cast<char>(c), '\0'};
+                    hal_display_print(s);
+                }
             }
         }
 
-        if (!input_line.empty()) {
-            // Lexical Analysis (Phase 1)
-            auto tokens = lex(input_line);
+        if (input_ptr > 0) {
+            // Lexical Analysis (Phase 1) - Input buffer is passed directly
+            TokenList tokens = lex(input_buffer);
             
             // Parse & Execute Engine (Phase 1)
             parse_and_execute(tokens);

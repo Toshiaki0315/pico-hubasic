@@ -1,11 +1,20 @@
 #include "hal_display.h"
+#include "hal_gpio.h"
 #include "mock_hal_display.h"
+#include <vector>
+#include <string>
+#include <cstring>
+#include <unistd.h>
 
 // ---------------------------------------------------------
 // Implementation of Mock API
 // ---------------------------------------------------------
 static std::vector<std::string> printed_lines;
 static std::string raw_buffer;
+static std::vector<DrawCommand> draw_commands;
+static std::vector<mock_hal::GpioCommand> gpio_commands;
+static std::vector<int> brightness_levels;
+static uint16_t mock_frame_buffer[320 * 240];
 static bool cls_called = false;
 
 namespace mock_hal {
@@ -18,9 +27,25 @@ std::string get_raw_print_buffer() {
     return raw_buffer;
 }
 
+std::vector<DrawCommand> get_draw_commands() {
+    return draw_commands;
+}
+
+std::vector<GpioCommand> get_gpio_commands() {
+    return gpio_commands;
+}
+
+std::vector<int> get_brightness_levels() {
+    return brightness_levels;
+}
+
 void reset() {
     printed_lines.clear();
     raw_buffer.clear();
+    draw_commands.clear();
+    gpio_commands.clear();
+    brightness_levels.clear();
+    memset(mock_frame_buffer, 0, sizeof(mock_frame_buffer));
     cls_called = false;
 }
 
@@ -44,11 +69,95 @@ void hal_display_print(const char* text) {
 }
 
 void hal_display_cls() {
+    memset(mock_frame_buffer, 0, sizeof(mock_frame_buffer));
     cls_called = true;
 }
 
 void hal_display_locate(int x, int y) {
     // No-op
+}
+
+void hal_graphics_pset(int x, int y, uint16_t color) {
+    if (x >= 0 && x < 320 && y >= 0 && y < 240) {
+        mock_frame_buffer[y * 320 + x] = color;
+    }
+    draw_commands.push_back({DrawCommand::PSET, x, y, 0, 0, 0, color});
+}
+
+uint16_t hal_graphics_get_pixel(int x, int y) {
+    if (x < 0 || x >= 320 || y < 0 || y >= 240) return 0;
+    return mock_frame_buffer[y * 320 + x];
+}
+
+void hal_display_sync() {
+    // No-op for mock
+}
+
+void hal_graphics_line(int x1, int y1, int x2, int y2, uint16_t color) {
+    // Record high-level command for existing tests
+    draw_commands.push_back({DrawCommand::LINE, x1, y1, x2, y2, 0, color});
+    
+    // Update buffer for advanced commands (without recording each pset)
+    int dx = abs(x2 - x1), sx = x1 < x2 ? 1 : -1;
+    int dy = -abs(y2 - y1), sy = y1 < y2 ? 1 : -1;
+    int err = dx + dy, e2;
+    while (true) {
+        if (x1 >= 0 && x1 < 320 && y1 >= 0 && y1 < 240) mock_frame_buffer[y1 * 320 + x1] = color;
+        if (x1 == x2 && y1 == y2) break;
+        e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x1 += sx; }
+        if (e2 <= dx) { err += dx; y1 += sy; }
+    }
+}
+
+void hal_graphics_circle(int x0, int y0, int radius, uint16_t color) {
+    // Record high-level command
+    draw_commands.push_back({DrawCommand::CIRCLE, x0, y0, 0, 0, radius, color});
+    
+    // Update buffer
+    int x = radius, y = 0;
+    int err = 0;
+    while (x >= y) {
+        auto set = [&](int px, int py) {
+            if (px >= 0 && px < 320 && py >= 0 && py < 240) mock_frame_buffer[py * 320 + px] = color;
+        };
+        set(x0 + x, y0 + y); set(x0 + y, y0 + x);
+        set(x0 - y, y0 + x); set(x0 - x, y0 + y);
+        set(x0 - x, y0 - y); set(x0 - y, y0 - x);
+        set(x0 + y, y0 - x); set(x0 + x, y0 - y);
+        if (err <= 0) { y += 1; err += 2 * y + 1; }
+        if (err > 0) { x -= 1; err -= 2 * x + 1; }
+    }
+}
+
+void hal_display_get_info(int& width, int& height) {
+    width = 320;
+    height = 240;
+}
+
+void hal_display_set_brightness(int level) {
+    brightness_levels.push_back(level);
+}
+
+void hal_gpio_init(int pin, int mode, int pull) {
+    gpio_commands.push_back({pin, mode, pull, false});
+}
+
+void hal_gpio_write(int pin, bool value) {
+    for (auto& cmd : gpio_commands) {
+        if (cmd.pin == pin) {
+            cmd.value = value;
+            return;
+        }
+    }
+    gpio_commands.push_back({pin, 1, 0, value}); // Default to output if not init
+}
+
+bool hal_gpio_read(int pin) {
+    for (auto& cmd : gpio_commands) {
+        if (cmd.pin == pin) return cmd.value;
+    }
+    return false;
 }
 
 static char mock_input_buf[256] = "";
@@ -61,4 +170,8 @@ void hal_display_input(char* buffer, int max_len) {
 void hal_display_set_mock_input(const char* input) {
     strncpy(mock_input_buf, input, sizeof(mock_input_buf) - 1);
     mock_input_buf[sizeof(mock_input_buf) - 1] = '\0';
+}
+
+void hal_system_wait(int ms) {
+    if (ms > 0) usleep(ms * 1000);
 }
