@@ -41,8 +41,10 @@ if(BUILD_TESTS)
         tests/test_file_ops.cpp
         tests/test_builtin_functions_ext.cpp
         tests/test_advanced_features.cpp
+        tests/test_sound_logic.cpp
         tests/mock_hal_display.cpp
         src/hal_gpio.cpp
+        src/hal_sound.cpp
     )
     target_include_directories(basic_tests PRIVATE src tests)
     target_link_libraries(basic_tests PRIVATE core_lib GTest::gtest_main)

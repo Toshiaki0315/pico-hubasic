@@ -1,6 +1,7 @@
 #include "parser.h"
 #include "hal_display.h"
 #include "hal_gpio.h"
+#include "hal_sound.h"
 #include <stdio.h>
 #include <stdexcept>
 #include <cmath>
@@ -1585,6 +1586,106 @@ static void execute_mid_statement(const TokenList& tokens, int& pos) {
     set_variable(var_name, original); // Write back modified string
 }
 
+static void execute_beep(const TokenList& tokens, int& pos) {
+    pos++; // skip BEEP
+    hal_sound_beep();
+}
+
+static void execute_sound(const TokenList& tokens, int& pos) {
+    pos++; // skip SOUND
+    Value freq_val = parse_relation(tokens, pos);
+    require_token(tokens, pos, TokenType::COMMA, "Expected ','"); pos++;
+    Value dur_val = parse_relation(tokens, pos);
+    
+    hal_sound_play(freq_val.num_val, static_cast<int>(dur_val.num_val));
+}
+
+static void execute_music(const TokenList& tokens, int& pos) {
+    pos++; // skip MUSIC
+    Value mml_val = parse_relation(tokens, pos);
+    if (mml_val.type != Value::Type::STR) throw std::runtime_error("Type Mismatch: MUSIC expects string");
+    
+    const char* mml = mml_val.str_val;
+    int octave = 4;
+    int default_len = 4;
+    int tempo = 120;
+    int volume = 15;
+    
+    int i = 0;
+    while (mml[i] != '\0') {
+        char c = std::toupper(mml[i++]);
+        if (std::isspace(c)) continue;
+        
+        switch (c) {
+            case 'O': { // Octave
+                int val = 0;
+                while (std::isdigit(mml[i])) val = val * 10 + (mml[i++] - '0');
+                if (val >= 1 && val <= 8) octave = val;
+                break;
+            }
+            case 'L': { // Length
+                int val = 0;
+                while (std::isdigit(mml[i])) val = val * 10 + (mml[i++] - '0');
+                if (val >= 1 && val <= 64) default_len = val;
+                break;
+            }
+            case 'T': { // Tempo
+                int val = 0;
+                while (std::isdigit(mml[i])) val = val * 10 + (mml[i++] - '0');
+                if (val >= 32 && val <= 255) tempo = val;
+                break;
+            }
+            case 'V': { // Volume
+                int val = 0;
+                while (std::isdigit(mml[i])) val = val * 10 + (mml[i++] - '0');
+                hal_sound_set_volume(val);
+                break;
+            }
+            case '>': octave++; if (octave > 8) octave = 8; break;
+            case '<': octave--; if (octave < 1) octave = 1; break;
+            
+            case 'C': case 'D': case 'E': case 'F': case 'G': case 'A': case 'B':
+            case 'R': {
+                int note = 0;
+                bool is_rest = (c == 'R');
+                if (!is_rest) {
+                    if (c == 'C') note = 0;
+                    else if (c == 'D') note = 2;
+                    else if (c == 'E') note = 4;
+                    else if (c == 'F') note = 5;
+                    else if (c == 'G') note = 7;
+                    else if (c == 'A') note = 9;
+                    else if (c == 'B') note = 11;
+                    
+                    // accidental
+                    if (mml[i] == '#' || mml[i] == '+') { note++; i++; }
+                    else if (mml[i] == '-') { note--; i++; }
+                }
+                
+                int len = default_len;
+                if (std::isdigit(mml[i])) {
+                    len = 0;
+                    while (std::isdigit(mml[i])) len = len * 10 + (mml[i++] - '0');
+                }
+                
+                float duration_ms = (60.0f / tempo) * (4.0f / len) * 1000.0f;
+                if (mml[i] == '.') {
+                    duration_ms *= 1.5f;
+                    i++;
+                }
+                
+                if (is_rest) {
+                    hal_sound_play(0, (int)duration_ms);
+                } else {
+                    float freq = 440.0f * powf(2.0f, (note - 9 + (octave - 4) * 12) / 12.0f);
+                    hal_sound_play(freq, (int)duration_ms);
+                }
+                break;
+            }
+        }
+    }
+}
+
 static void execute_statement(const TokenList& tokens, int& pos) {
     if (pos >= tokens.size || tokens.tokens[pos].type == TokenType::END_OF_FILE) return;
 
@@ -1632,9 +1733,10 @@ static void execute_statement(const TokenList& tokens, int& pos) {
         case TokenType::WIDTH: case TokenType::CONSOLE:
         case TokenType::REPEAT: case TokenType::UNTIL: case TokenType::GET:
         case TokenType::WINDOW:
-        case TokenType::POLY: case TokenType::BEEP:
-        case TokenType::MUSIC: case TokenType::SOUND:
-            execute_not_implemented(tokens, pos); break;
+        case TokenType::POLY:    execute_not_implemented(tokens, pos); break;
+        case TokenType::BEEP:    execute_beep(tokens, pos); break;
+        case TokenType::MUSIC:   execute_music(tokens, pos); break;
+        case TokenType::SOUND:   execute_sound(tokens, pos); break;
 
         default: throw std::runtime_error("Syntax Error: Unrecognized statement");
     }
