@@ -38,9 +38,9 @@ void hal_display_init() {
     // No-op for host tests
 }
 
-void hal_display_print(const std::string& text) {
+void hal_display_print(const char* text) {
     raw_buffer += text;
-    printed_lines.push_back(text);
+    printed_lines.push_back(std::string(text));
 }
 
 void hal_display_cls() {
@@ -49,4 +49,16 @@ void hal_display_cls() {
 
 void hal_display_locate(int x, int y) {
     // No-op
+}
+
+static char mock_input_buf[256] = "";
+
+void hal_display_input(char* buffer, int max_len) {
+    strncpy(buffer, mock_input_buf, max_len - 1);
+    buffer[max_len - 1] = '\0';
+}
+
+void hal_display_set_mock_input(const char* input) {
+    strncpy(mock_input_buf, input, sizeof(mock_input_buf) - 1);
+    mock_input_buf[sizeof(mock_input_buf) - 1] = '\0';
 }

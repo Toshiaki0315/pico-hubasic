@@ -33,6 +33,7 @@ if(BUILD_TESTS)
     add_executable(basic_tests
         tests/test_lexer.cpp
         tests/test_parser.cpp
+        tests/test_input_end_stop.cpp
         tests/mock_hal_display.cpp
     )
     target_include_directories(basic_tests PRIVATE src tests)

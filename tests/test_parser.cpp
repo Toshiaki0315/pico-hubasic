@@ -18,6 +18,10 @@ TEST_F(ParserTest, EvaluateMathExpressions) {
 
     parse_and_execute(lex("PRINT (1 + 2) * 3"));
     EXPECT_EQ(mock_hal::get_raw_print_buffer(), "9\n");
+    mock_hal::reset();
+
+    parse_and_execute(lex("PRINT 2 ^ 3")); // 8
+    EXPECT_EQ(mock_hal::get_raw_print_buffer(), "8\n");
 }
 
 TEST_F(ParserTest, VariablesUsage) {
@@ -27,6 +31,19 @@ TEST_F(ParserTest, VariablesUsage) {
 
     parse_and_execute(lex("PRINT A * B"));
     EXPECT_EQ(mock_hal::get_raw_print_buffer(), "50\n");
+}
+
+TEST_F(ParserTest, IntegerVariableUsage) {
+    parse_and_execute(lex("A% = 3.99"));  // Truncates to 3
+    parse_and_execute(lex("B = 3.99"));   // Floating 3.99
+    mock_hal::reset();
+    
+    parse_and_execute(lex("PRINT A%"));
+    EXPECT_EQ(mock_hal::get_raw_print_buffer(), "3\n");
+    mock_hal::reset();
+    
+    parse_and_execute(lex("PRINT A% * 2")); // 6
+    EXPECT_EQ(mock_hal::get_raw_print_buffer(), "6\n");
 }
 
 TEST_F(ParserTest, ExecuteSyntaxError) {

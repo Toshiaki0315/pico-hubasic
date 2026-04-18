@@ -2,6 +2,7 @@
 #include <cctype>
 #include <cstring>
 #include <cstdio>
+#include <stdexcept>
 
 TokenList lex(const char* source) {
     TokenList token_list;
@@ -45,6 +46,7 @@ TokenList lex(const char* source) {
         if (c == '-') { token_list.tokens[token_list.size] = {TokenType::MINUS, "-"}; token_list.size++; pos++; continue; }
         if (c == '*') { token_list.tokens[token_list.size] = {TokenType::MUL, "*"}; token_list.size++; pos++; continue; }
         if (c == '/') { token_list.tokens[token_list.size] = {TokenType::DIV, "/"}; token_list.size++; pos++; continue; }
+        if (c == '^') { token_list.tokens[token_list.size] = {TokenType::POWER, "^"}; token_list.size++; pos++; continue; }
         if (c == '(') { token_list.tokens[token_list.size] = {TokenType::LPAREN, "("}; token_list.size++; pos++; continue; }
         if (c == ')') { token_list.tokens[token_list.size] = {TokenType::RPAREN, ")"}; token_list.size++; pos++; continue; }
         if (c == '>') { token_list.tokens[token_list.size] = {TokenType::GT, ">"}; token_list.size++; pos++; continue; }
@@ -90,7 +92,7 @@ TokenList lex(const char* source) {
 
         if (std::isalpha(c)) {
             int start = pos;
-            while (pos < len && (std::isalnum(source[pos]) || source[pos] == '$')) {
+            while (pos < len && (std::isalnum(source[pos]) || source[pos] == '$' || source[pos] == '%')) {
                 pos++;
             }
             char ident[MAX_TOKEN_LEN];
@@ -126,6 +128,32 @@ TokenList lex(const char* source) {
             else if (strcmp(upper_ident, "DATA") == 0) t.type = TokenType::DATA;
             else if (strcmp(upper_ident, "RESTORE") == 0) t.type = TokenType::RESTORE;
             else if (strcmp(upper_ident, "DIM") == 0) t.type = TokenType::DIM;
+            else if (strcmp(upper_ident, "INPUT") == 0) t.type = TokenType::INPUT;
+            else if (strcmp(upper_ident, "END") == 0) t.type = TokenType::END;
+            else if (strcmp(upper_ident, "STOP") == 0) t.type = TokenType::STOP;
+            else if (strcmp(upper_ident, "ABS") == 0 || strcmp(upper_ident, "INT") == 0 || strcmp(upper_ident, "RND") == 0 ||
+                     strcmp(upper_ident, "LEN") == 0 || strcmp(upper_ident, "MID$") == 0 || strcmp(upper_ident, "LEFT$") == 0) {} // Built-in functions bypass variable checks
+            else {
+                // Not a keyword. Check strict variable name rules: [A-Z][0-9]?[$%]?
+                bool valid = true;
+                if (text_len > 3) valid = false;
+                else if (text_len == 1) { 
+                    if (!std::isalpha(upper_ident[0])) valid = false;
+                }
+                else if (text_len == 2) {
+                    if (!std::isalpha(upper_ident[0])) valid = false;
+                    else if (!std::isdigit(upper_ident[1]) && upper_ident[1] != '$' && upper_ident[1] != '%') valid = false;
+                }
+                else if (text_len == 3) {
+                    if (!std::isalpha(upper_ident[0])) valid = false;
+                    else if (!std::isdigit(upper_ident[1])) valid = false;
+                    else if (upper_ident[2] != '$' && upper_ident[2] != '%') valid = false;
+                }
+                
+                if (!valid) {
+                    throw std::runtime_error("Syntax Error: Invalid variable name");
+                }
+            }
 
             token_list.tokens[token_list.size++] = t;
             continue;

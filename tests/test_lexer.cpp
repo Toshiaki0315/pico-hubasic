@@ -60,3 +60,23 @@ TEST_F(LexerTest, ParseMathOperators) {
     EXPECT_EQ(tokens.tokens[10].type, TokenType::NUMBER);
     EXPECT_EQ(tokens.tokens[11].type, TokenType::END_OF_FILE);
 }
+
+TEST_F(LexerTest, ParsePowerOperator) {
+    TokenList tokens = lex("2 ^ 3");
+    ASSERT_GE(tokens.size, 4);
+    EXPECT_EQ(tokens.tokens[0].type, TokenType::NUMBER);
+    EXPECT_EQ(tokens.tokens[1].type, TokenType::POWER);
+    EXPECT_EQ(tokens.tokens[2].type, TokenType::NUMBER);
+}
+
+TEST_F(LexerTest, VariableNameRules) {
+    EXPECT_NO_THROW(lex("A = 1"));
+    EXPECT_NO_THROW(lex("Z9 = 2"));
+    EXPECT_NO_THROW(lex("B$ = \"X\""));
+    EXPECT_NO_THROW(lex("C1% = 3"));
+
+    // Expected Syntax Errors
+    EXPECT_THROW(lex("AA = 1"), std::runtime_error);
+    EXPECT_THROW(lex("A12 = 1"), std::runtime_error);
+    EXPECT_THROW(lex("LONGVAR = 1"), std::runtime_error);
+}

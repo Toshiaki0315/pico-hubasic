@@ -11,22 +11,29 @@
 // Data Representation
 // ---------------------------------------------------------
 struct Value {
-    enum class Type { NUM, STR };
+    enum class Type { NUM, INT, STR };
     Type type;
     float num_val;
+    int int_val;
     char str_val[128];
 
-    Value() : type(Type::NUM), num_val(0.0f) { str_val[0] = '\0'; }
-    Value(float n) : type(Type::NUM), num_val(n) { str_val[0] = '\0'; }
-    Value(const char* s) : type(Type::STR), num_val(0.0f) {
+    Value() : type(Type::NUM), num_val(0.0f), int_val(0) { str_val[0] = '\0'; }
+    Value(float n) : type(Type::NUM), num_val(n), int_val(0) { str_val[0] = '\0'; }
+    Value(int i) : type(Type::INT), num_val((float)i), int_val(i) { str_val[0] = '\0'; }
+    Value(const char* s) : type(Type::STR), num_val(0.0f), int_val(0) {
         strncpy(str_val, s, sizeof(str_val) - 1);
         str_val[sizeof(str_val) - 1] = '\0';
+    }
+
+    float get_num() const {
+        return num_val;
     }
 
     const char* c_str() const {
         if (type == Type::STR) return str_val;
         static char buf[32];
-        snprintf(buf, sizeof(buf), "%g", num_val);
+        if (type == Type::INT) snprintf(buf, sizeof(buf), "%d", int_val);
+        else snprintf(buf, sizeof(buf), "%g", num_val);
         return buf;
     }
 };
@@ -210,6 +217,8 @@ static Value evaluate_builtin_function(const char* var_name, Value* args, int ar
 // Recursive Descent Parser for Expressions
 // ---------------------------------------------------------
 
+static Value parse_power_expr(const TokenList& tokens, int& pos);
+
 static Value parse_factor(const TokenList& tokens, int& pos) {
     if (pos >= tokens.size) return Value(0.0f);
     Token t = tokens.tokens[pos];
@@ -223,7 +232,8 @@ static Value parse_factor(const TokenList& tokens, int& pos) {
     if (t.type == TokenType::MINUS) {
         pos++; 
         Value v = parse_factor(tokens, pos);
-        if (v.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: Unary - on string");
+        if (v.type == Value::Type::STR) throw std::runtime_error("Type Mismatch: Unary - on string");
+        if (v.type == Value::Type::INT) return Value(-v.int_val);
         return Value(-v.num_val);
     }
     if (t.type == TokenType::NUMBER) {
@@ -288,15 +298,28 @@ static Value parse_factor(const TokenList& tokens, int& pos) {
     throw std::runtime_error("Syntax Error in expression");
 }
 
-static Value parse_term(const TokenList& tokens, int& pos) {
+static Value parse_power_expr(const TokenList& tokens, int& pos) {
     Value val = parse_factor(tokens, pos);
+    while (pos < tokens.size) {
+        if (tokens.tokens[pos].type != TokenType::POWER) break;
+        pos++;
+        Value next_val = parse_factor(tokens, pos);
+        if (val.type == Value::Type::STR || next_val.type == Value::Type::STR) throw std::runtime_error("Type Mismatch: Power on string");
+        val.num_val = std::pow(val.num_val, next_val.num_val);
+        val.type = Value::Type::NUM;
+    }
+    return val;
+}
+
+static Value parse_term(const TokenList& tokens, int& pos) {
+    Value val = parse_power_expr(tokens, pos);
     while (pos < tokens.size) {
         TokenType op = tokens.tokens[pos].type;
         if (op != TokenType::MUL && op != TokenType::DIV) break;
         pos++;
-        Value next_val = parse_factor(tokens, pos);
+        Value next_val = parse_power_expr(tokens, pos);
         
-        if (val.type != Value::Type::NUM || next_val.type != Value::Type::NUM) {
+        if (val.type == Value::Type::STR || next_val.type == Value::Type::STR) {
             throw std::runtime_error("Type Mismatch: Cannot multiply/divide strings");
         }
         
@@ -306,6 +329,7 @@ static Value parse_term(const TokenList& tokens, int& pos) {
             if (next_val.num_val == 0.0f) throw std::runtime_error("Division by zero");
             val.num_val /= next_val.num_val;
         }
+        val.type = Value::Type::NUM;
     }
     return val;
 }
@@ -323,14 +347,16 @@ static Value parse_expression(const TokenList& tokens, int& pos) {
                 char buf[128];
                 snprintf(buf, sizeof(buf), "%s%s", val.str_val, next_val.str_val);
                 val = Value(buf);
-            } else if (val.type == Value::Type::NUM && next_val.type == Value::Type::NUM) {
+            } else if (val.type != Value::Type::STR && next_val.type != Value::Type::STR) {
                 val.num_val += next_val.num_val;
+                val.type = Value::Type::NUM;
             } else {
                 throw std::runtime_error("Type Mismatch: Cannot add string and number");
             }
         } else {
-            if (val.type != Value::Type::NUM || next_val.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: Cannot subtract strings");
+            if (val.type == Value::Type::STR || next_val.type == Value::Type::STR) throw std::runtime_error("Type Mismatch: Cannot subtract strings");
             val.num_val -= next_val.num_val;
+            val.type = Value::Type::NUM;
         }
     }
     return val;
@@ -345,10 +371,10 @@ static Value parse_relation(const TokenList& tokens, int& pos) {
             pos++;
             Value next_val = parse_expression(tokens, pos);
             
-            if (val.type != next_val.type) throw std::runtime_error("Type Mismatch: Cannot compare string and number");
+            if ((val.type == Value::Type::STR) != (next_val.type == Value::Type::STR)) throw std::runtime_error("Type Mismatch: Cannot compare string and number");
             
             bool result = false;
-            if (val.type == Value::Type::NUM) {
+            if (val.type != Value::Type::STR) {
                 float a = val.num_val, b = next_val.num_val;
                 if (op == TokenType::ASSIGN) result = (a == b);
                 else if (op == TokenType::GT) result = (a > b);
@@ -417,8 +443,11 @@ static void execute_read(const TokenList& tokens, int& pos) {
         
         int nlen = strlen(var_name);
         bool is_str_var = (nlen > 0 && var_name[nlen-1] == '$');
+        bool is_int_var = (nlen > 0 && var_name[nlen-1] == '%');
         if (is_str_var && val.type != Value::Type::STR) throw std::runtime_error("Type Mismatch in READ (Expected String)");
-        if (!is_str_var && val.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch in READ (Expected Number)");
+        if (!is_str_var && val.type == Value::Type::STR) throw std::runtime_error("Type Mismatch in READ (Expected Number)");
+        if (is_int_var) val = Value((int)val.num_val);
+        else if (!is_str_var && val.type == Value::Type::INT) val = Value(val.num_val);
         
         if (arr_idx >= 0) {
             ArrayRef* arr = get_array(var_name);
@@ -626,8 +655,16 @@ static void execute_assignment(const TokenList& tokens, int& pos, bool explicit_
     
     int nlen = strlen(var_name);
     bool is_str_var = (nlen > 0 && var_name[nlen-1] == '$');
+    bool is_int_var = (nlen > 0 && var_name[nlen-1] == '%');
+    
     if (is_str_var && result.type != Value::Type::STR) throw std::runtime_error("Type Mismatch: Assigning NUM to STR variable");
-    if (!is_str_var && result.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: Assigning STR to NUM variable");
+    if (!is_str_var && result.type == Value::Type::STR) throw std::runtime_error("Type Mismatch: Assigning STR to NUM variable");
+
+    if (is_int_var) {
+        result = Value((int)result.num_val);
+    } else if (!is_str_var && result.type == Value::Type::INT) {
+        result = Value(result.num_val);
+    }
 
     if (arr_idx >= 0) {
         ArrayRef* arr = get_array(var_name);
@@ -637,6 +674,81 @@ static void execute_assignment(const TokenList& tokens, int& pos, bool explicit_
     } else {
         set_variable(var_name, result);
     }
+}
+
+static void execute_input(const TokenList& tokens, int& pos) {
+    pos++; // skip INPUT
+    if (pos < tokens.size && tokens.tokens[pos].type == TokenType::STRING) {
+        hal_display_print(tokens.tokens[pos].text);
+        printf("%s", tokens.tokens[pos].text);
+        pos++;
+        // BASIC often uses ';' or ',' here, we'll accept ',' or just nothing
+        if (pos < tokens.size && (tokens.tokens[pos].type == TokenType::COMMA)) pos++;
+    } else {
+        hal_display_print("? ");
+        printf("? ");
+    }
+    
+    while (pos < tokens.size && tokens.tokens[pos].type != TokenType::END_OF_FILE) {
+        require_token(tokens, pos, TokenType::IDENTIFIER, "Syntax Error: INPUT expects identifier");
+        char var_name[64];
+        strncpy(var_name, tokens.tokens[pos].text, sizeof(var_name)-1);
+        var_name[sizeof(var_name)-1] = '\0';
+        pos++;
+        
+        int arr_idx = -1;
+        if (pos < tokens.size && tokens.tokens[pos].type == TokenType::LPAREN) {
+            pos++;
+            Value idx_val = parse_relation(tokens, pos);
+            if (idx_val.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: Array index");
+            require_token(tokens, pos, TokenType::RPAREN, "Syntax Error: Expected ')'");
+            pos++;
+            arr_idx = static_cast<int>(idx_val.num_val);
+        }
+        
+        char in_buf[128] = "";
+        hal_display_input(in_buf, sizeof(in_buf));
+        
+        int nlen = strlen(var_name);
+        bool is_str_var = (nlen > 0 && var_name[nlen-1] == '$');
+        bool is_int_var = (nlen > 0 && var_name[nlen-1] == '%');
+        Value val;
+        if (is_str_var) {
+            val = Value(in_buf);
+        } else if (is_int_var) {
+            val = Value((int)atof(in_buf));
+        } else {
+            val = Value((float)atof(in_buf));
+        }
+        
+        if (arr_idx >= 0) {
+            ArrayRef* arr = get_array(var_name);
+            if (!arr) throw std::runtime_error("Array not dimensioned");
+            if (arr_idx < 0 || arr_idx >= arr->size) throw std::runtime_error("Out of bounds");
+            array_heap[arr->start_idx + arr_idx] = val;
+        } else {
+            set_variable(var_name, val);
+        }
+        
+        if (pos < tokens.size && tokens.tokens[pos].type == TokenType::COMMA) pos++;
+        else break;
+    }
+}
+
+static void execute_end(const TokenList& tokens, int& pos) {
+    pos = tokens.size;
+    current_line = -1;
+    branch_taken = true;
+}
+
+static void execute_stop(const TokenList& tokens, int& pos) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "Break in %d\n", current_line);
+    hal_display_print(buf);
+    printf("%s", buf);
+    pos = tokens.size;
+    current_line = -1;
+    branch_taken = true;
 }
 
 // Switchboard
@@ -655,6 +767,9 @@ static void execute_statement(const TokenList& tokens, int& pos) {
         case TokenType::FOR:     execute_for(tokens, pos); break;
         case TokenType::NEXT:    execute_next(tokens, pos); break;
         case TokenType::DIM:     execute_dim(tokens, pos); break;
+        case TokenType::INPUT:   execute_input(tokens, pos); break;
+        case TokenType::END:     execute_end(tokens, pos); break;
+        case TokenType::STOP:    execute_stop(tokens, pos); break;
         case TokenType::LET:     execute_assignment(tokens, pos, true); break;
         case TokenType::IDENTIFIER: execute_assignment(tokens, pos, false); break;
         default: throw std::runtime_error("Syntax Error: Unrecognized statement");
