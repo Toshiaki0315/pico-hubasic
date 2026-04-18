@@ -751,6 +751,14 @@ static void execute_stop(const TokenList& tokens, int& pos) {
     branch_taken = true;
 }
 
+static void execute_not_implemented(const TokenList& tokens, int& pos) {
+    char buf[128];
+    snprintf(buf, sizeof(buf), "Notice: Command '%s' is registered but not yet implemented.\n", tokens.tokens[pos].text);
+    hal_display_print(buf);
+    printf("%s", buf);
+    pos = tokens.size; // Skip to the end of statement/line
+}
+
 // Switchboard
 static void execute_statement(const TokenList& tokens, int& pos) {
     if (pos >= tokens.size || tokens.tokens[pos].type == TokenType::END_OF_FILE) return;
@@ -772,6 +780,18 @@ static void execute_statement(const TokenList& tokens, int& pos) {
         case TokenType::STOP:    execute_stop(tokens, pos); break;
         case TokenType::LET:     execute_assignment(tokens, pos, true); break;
         case TokenType::IDENTIFIER: execute_assignment(tokens, pos, false); break;
+        
+        // Phase 2 Extended Commands (Stubs)
+        case TokenType::INIT: case TokenType::CLEAR: case TokenType::NEWON:
+        case TokenType::WIDTH: case TokenType::CONSOLE: case TokenType::CLS:
+        case TokenType::REPEAT: case TokenType::UNTIL: case TokenType::GET:
+        case TokenType::FILES: case TokenType::GPIO: case TokenType::WINDOW:
+        case TokenType::PSET: case TokenType::LINE: case TokenType::CIRCLE:
+        case TokenType::POLY: case TokenType::PAINT: case TokenType::GET_AT:
+        case TokenType::PUT_AT: case TokenType::COLOR: case TokenType::BEEP:
+        case TokenType::MUSIC: case TokenType::SOUND:
+            execute_not_implemented(tokens, pos); break;
+
         default: throw std::runtime_error("Syntax Error: Unrecognized statement");
     }
 }

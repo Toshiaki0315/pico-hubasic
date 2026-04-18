@@ -379,3 +379,32 @@ TEST_F(BuiltInFunctionsTest, FunctionErrorHandling) {
     EXPECT_TRUE(mock_hal::get_raw_print_buffer().find("Type Mismatch") != std::string::npos);
 }
 
+// ---------------------------------------------------------
+// Phase 2: Extended Keywords Stubs
+// ---------------------------------------------------------
+class Phase2ExtensionTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        clear_program();
+        mock_hal::reset();
+    }
+};
+
+TEST_F(Phase2ExtensionTest, KeywordStubRouting) {
+    // Assert that these keywords don't throw syntax errors and route safely
+    parse_and_execute(lex("GET A$"));
+    EXPECT_TRUE(mock_hal::get_raw_print_buffer().find("Notice: Command 'GET' is registered but not yet implemented.") != std::string::npos);
+    mock_hal::reset();
+
+    parse_and_execute(lex("PSET (1,2), 3"));
+    EXPECT_TRUE(mock_hal::get_raw_print_buffer().find("Notice: Command 'PSET'") != std::string::npos);
+    mock_hal::reset();
+
+    parse_and_execute(lex("GET@ (1,1)-(2,2), A, 1"));
+    EXPECT_TRUE(mock_hal::get_raw_print_buffer().find("Notice: Command 'GET@'") != std::string::npos);
+    mock_hal::reset();
+
+    parse_and_execute(lex("GPIO 15, 1, 0"));
+    EXPECT_TRUE(mock_hal::get_raw_print_buffer().find("Notice: Command 'GPIO'") != std::string::npos);
+}
+

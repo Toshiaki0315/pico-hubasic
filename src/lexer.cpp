@@ -92,7 +92,7 @@ TokenList lex(const char* source) {
 
         if (std::isalpha(c)) {
             int start = pos;
-            while (pos < len && (std::isalnum(source[pos]) || source[pos] == '$' || source[pos] == '%')) {
+            while (pos < len && (std::isalnum(source[pos]) || source[pos] == '$' || source[pos] == '%' || source[pos] == '@')) {
                 pos++;
             }
             char ident[MAX_TOKEN_LEN];
@@ -131,6 +131,29 @@ TokenList lex(const char* source) {
             else if (strcmp(upper_ident, "INPUT") == 0) t.type = TokenType::INPUT;
             else if (strcmp(upper_ident, "END") == 0) t.type = TokenType::END;
             else if (strcmp(upper_ident, "STOP") == 0) t.type = TokenType::STOP;
+            else if (strcmp(upper_ident, "INIT") == 0) t.type = TokenType::INIT;
+            else if (strcmp(upper_ident, "CLEAR") == 0) t.type = TokenType::CLEAR;
+            else if (strcmp(upper_ident, "NEWON") == 0) t.type = TokenType::NEWON;
+            else if (strcmp(upper_ident, "WIDTH") == 0) t.type = TokenType::WIDTH;
+            else if (strcmp(upper_ident, "CONSOLE") == 0) t.type = TokenType::CONSOLE;
+            else if (strcmp(upper_ident, "CLS") == 0) t.type = TokenType::CLS;
+            else if (strcmp(upper_ident, "REPEAT") == 0) t.type = TokenType::REPEAT;
+            else if (strcmp(upper_ident, "UNTIL") == 0) t.type = TokenType::UNTIL;
+            else if (strcmp(upper_ident, "GET") == 0) t.type = TokenType::GET;
+            else if (strcmp(upper_ident, "FILES") == 0) t.type = TokenType::FILES;
+            else if (strcmp(upper_ident, "GPIO") == 0) t.type = TokenType::GPIO;
+            else if (strcmp(upper_ident, "WINDOW") == 0) t.type = TokenType::WINDOW;
+            else if (strcmp(upper_ident, "PSET") == 0) t.type = TokenType::PSET;
+            else if (strcmp(upper_ident, "LINE") == 0) t.type = TokenType::LINE;
+            else if (strcmp(upper_ident, "CIRCLE") == 0) t.type = TokenType::CIRCLE;
+            else if (strcmp(upper_ident, "POLY") == 0) t.type = TokenType::POLY;
+            else if (strcmp(upper_ident, "PAINT") == 0) t.type = TokenType::PAINT;
+            else if (strcmp(upper_ident, "GET@") == 0) t.type = TokenType::GET_AT;
+            else if (strcmp(upper_ident, "PUT@") == 0) t.type = TokenType::PUT_AT;
+            else if (strcmp(upper_ident, "COLOR") == 0) t.type = TokenType::COLOR;
+            else if (strcmp(upper_ident, "BEEP") == 0) t.type = TokenType::BEEP;
+            else if (strcmp(upper_ident, "MUSIC") == 0) t.type = TokenType::MUSIC;
+            else if (strcmp(upper_ident, "SOUND") == 0) t.type = TokenType::SOUND;
             else if (strcmp(upper_ident, "ABS") == 0 || strcmp(upper_ident, "INT") == 0 || strcmp(upper_ident, "RND") == 0 ||
                      strcmp(upper_ident, "LEN") == 0 || strcmp(upper_ident, "MID$") == 0 || strcmp(upper_ident, "LEFT$") == 0) {} // Built-in functions bypass variable checks
             else {
