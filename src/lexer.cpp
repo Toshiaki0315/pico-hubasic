@@ -52,6 +52,8 @@ TokenList lex(const char* source) {
         if (c == '>') { token_list.tokens[token_list.size] = {TokenType::GT, ">"}; token_list.size++; pos++; continue; }
         if (c == '<') { token_list.tokens[token_list.size] = {TokenType::LT, "<"}; token_list.size++; pos++; continue; }
         if (c == ',') { token_list.tokens[token_list.size] = {TokenType::COMMA, ","}; token_list.size++; pos++; continue; }
+        if (c == ';') { token_list.tokens[token_list.size] = {TokenType::SEMICOLON, ";"}; token_list.size++; pos++; continue; }
+        if (c == ':') { token_list.tokens[token_list.size] = {TokenType::COLON, ":"}; token_list.size++; pos++; continue; }
 
         if (c == '"') {
             pos++;
@@ -92,7 +94,7 @@ TokenList lex(const char* source) {
 
         if (std::isalpha(c)) {
             int start = pos;
-            while (pos < len && (std::isalnum(source[pos]) || source[pos] == '$' || source[pos] == '%' || source[pos] == '@')) {
+            while (pos < len && (std::isalnum(source[pos]) || source[pos] == '$' || source[pos] == '%' || source[pos] == '@' || source[pos] == '_')) {
                 pos++;
             }
             char ident[MAX_TOKEN_LEN];
@@ -137,10 +139,14 @@ TokenList lex(const char* source) {
             else if (strcmp(upper_ident, "WIDTH") == 0) t.type = TokenType::WIDTH;
             else if (strcmp(upper_ident, "CONSOLE") == 0) t.type = TokenType::CONSOLE;
             else if (strcmp(upper_ident, "CLS") == 0) t.type = TokenType::CLS;
+            else if (strcmp(upper_ident, "LOCATE") == 0) t.type = TokenType::LOCATE;
             else if (strcmp(upper_ident, "REPEAT") == 0) t.type = TokenType::REPEAT;
             else if (strcmp(upper_ident, "UNTIL") == 0) t.type = TokenType::UNTIL;
             else if (strcmp(upper_ident, "GET") == 0) t.type = TokenType::GET;
             else if (strcmp(upper_ident, "FILES") == 0) t.type = TokenType::FILES;
+            else if (strcmp(upper_ident, "SAVE") == 0) t.type = TokenType::SAVE;
+            else if (strcmp(upper_ident, "LOAD") == 0) t.type = TokenType::LOAD;
+            else if (strcmp(upper_ident, "ON") == 0) t.type = TokenType::ON;
             else if (strcmp(upper_ident, "GPIO") == 0) t.type = TokenType::GPIO;
             else if (strcmp(upper_ident, "WINDOW") == 0) t.type = TokenType::WINDOW;
             else if (strcmp(upper_ident, "PSET") == 0) t.type = TokenType::PSET;
@@ -148,14 +154,23 @@ TokenList lex(const char* source) {
             else if (strcmp(upper_ident, "CIRCLE") == 0) t.type = TokenType::CIRCLE;
             else if (strcmp(upper_ident, "POLY") == 0) t.type = TokenType::POLY;
             else if (strcmp(upper_ident, "PAINT") == 0) t.type = TokenType::PAINT;
-            else if (strcmp(upper_ident, "GET@") == 0) t.type = TokenType::GET_AT;
-            else if (strcmp(upper_ident, "PUT@") == 0) t.type = TokenType::PUT_AT;
+            else if (strcmp(upper_ident, "GET_AT") == 0) t.type = TokenType::GET_AT;
+            else if (strcmp(upper_ident, "PUT_AT") == 0) t.type = TokenType::PUT_AT;
             else if (strcmp(upper_ident, "COLOR") == 0) t.type = TokenType::COLOR;
+            else if (strcmp(upper_ident, "BRIGHTNESS") == 0) t.type = TokenType::BRIGHTNESS;
+            else if (strcmp(upper_ident, "WAIT") == 0) t.type = TokenType::WAIT;
             else if (strcmp(upper_ident, "BEEP") == 0) t.type = TokenType::BEEP;
             else if (strcmp(upper_ident, "MUSIC") == 0) t.type = TokenType::MUSIC;
             else if (strcmp(upper_ident, "SOUND") == 0) t.type = TokenType::SOUND;
             else if (strcmp(upper_ident, "ABS") == 0 || strcmp(upper_ident, "INT") == 0 || strcmp(upper_ident, "RND") == 0 ||
-                     strcmp(upper_ident, "LEN") == 0 || strcmp(upper_ident, "MID$") == 0 || strcmp(upper_ident, "LEFT$") == 0) {} // Built-in functions bypass variable checks
+                     strcmp(upper_ident, "SGN") == 0 || strcmp(upper_ident, "SQR") == 0 ||
+                     strcmp(upper_ident, "SIN") == 0 || strcmp(upper_ident, "COS") == 0 || strcmp(upper_ident, "TAN") == 0 ||
+                     strcmp(upper_ident, "LOG") == 0 || strcmp(upper_ident, "EXP") == 0 ||
+                     strcmp(upper_ident, "LEN") == 0 || strcmp(upper_ident, "MID$") == 0 || 
+                     strcmp(upper_ident, "LEFT$") == 0 || strcmp(upper_ident, "RIGHT$") == 0 ||
+                     strcmp(upper_ident, "CHR$") == 0 || strcmp(upper_ident, "ASC") == 0 ||
+                     strcmp(upper_ident, "VAL") == 0 || strcmp(upper_ident, "STR$") == 0 ||
+                     strcmp(upper_ident, "TAB") == 0) {} // Built-in functions bypass variable checks
             else {
                 // Not a keyword. Check strict variable name rules: [A-Z][0-9]?[$%]?
                 bool valid = true;

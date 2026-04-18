@@ -37,9 +37,11 @@ enum class TokenType {
     INPUT,
     END,
     STOP,
-    INIT, CLEAR, NEWON, WIDTH, CONSOLE, CLS, REPEAT, UNTIL,
-    GET, FILES, GPIO,
+    INIT, CLEAR, NEWON, WIDTH, CONSOLE, CLS, LOCATE, REPEAT, UNTIL,
+    GET, FILES, SAVE, LOAD, GPIO, ON, COLON,
     WINDOW, PSET, LINE, CIRCLE, POLY, PAINT, GET_AT, PUT_AT, COLOR,
+    BRIGHTNESS,
+    WAIT,
     BEEP, MUSIC, SOUND,
     GT,
     LT,
@@ -47,6 +49,7 @@ enum class TokenType {
     LTE,
     NEQ,
     COMMA,
+    SEMICOLON,
     END_OF_FILE
 };
 

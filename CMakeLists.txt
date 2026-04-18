@@ -34,7 +34,15 @@ if(BUILD_TESTS)
         tests/test_lexer.cpp
         tests/test_parser.cpp
         tests/test_input_end_stop.cpp
+        tests/test_graphics.cpp
+        tests/test_gpio_brightness.cpp
+        tests/test_advanced_graphics.cpp
+        tests/test_extended_core.cpp
+        tests/test_file_ops.cpp
+        tests/test_builtin_functions_ext.cpp
+        tests/test_advanced_features.cpp
         tests/mock_hal_display.cpp
+        src/hal_gpio.cpp
     )
     target_include_directories(basic_tests PRIVATE src tests)
     target_link_libraries(basic_tests PRIVATE core_lib GTest::gtest_main)
