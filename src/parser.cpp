@@ -2,12 +2,14 @@
 #include "hal_display.h"
 #include "hal_gpio.h"
 #include "hal_sound.h"
+#include "hal_touch.h"
 #include <stdio.h>
 #include <stdexcept>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <cctype>
+#include <dirent.h>
 
 // ---------------------------------------------------------
 // Data Representation
@@ -173,6 +175,7 @@ static const char* token_type_to_string(TokenType type) {
         case TokenType::PUT_AT: return "PUT@";
         case TokenType::COLOR: return "COLOR";
         case TokenType::BEEP: return "BEEP";
+        case TokenType::PLAY: return "PLAY";
         case TokenType::MUSIC: return "MUSIC";
         case TokenType::SOUND: return "SOUND";
         case TokenType::GT: return ">";
@@ -266,46 +269,85 @@ static int data_ptr = 0;
 // Memory Compact Storage Helpers
 // ---------------------------------------------------------
 
+// Variable record layout (16 bytes per slot):
+//   [0..7]   name (8 bytes, null-padded, up to 8-char names)
+//   [8]      type (0=NUM, 1=INT, 2=STR)
+//   [9]      active flag
+//   [10..11] str_ptr (uint16, only for STR type)
+//   [12..15] value (float or int, 4 bytes)
+//
+// String heap layout: each slot has a 2-byte size-prefix so the interpreter
+// can reuse the slot in-place when a shorter string is reassigned.
+//   [str_ptr+0..1]  allocated size (uint16, bytes including null terminator)
+//   [str_ptr+2..]   string data (null-terminated)
+
 static void write_compact_value(uint16_t addr, const Value& val) {
-    logical_memory[addr + 4] = (uint8_t)val.type;
-    if (val.type == Value::Type::NUM) {
-        memcpy(&logical_memory[addr + 8], &val.num_val, 4);
-    } else if (val.type == Value::Type::INT) {
-        memcpy(&logical_memory[addr + 8], &val.int_val, 4);
-    } else if (val.type == Value::Type::STR) {
-        // Simple string heap allocation
+    if (val.type == Value::Type::STR) {
+        // Try in-place update when the variable already holds a string
+        uint8_t old_type   = logical_memory[addr + 8];
+        uint8_t old_active = logical_memory[addr + 9];
+        if (old_active && (Value::Type)old_type == Value::Type::STR) {
+            uint16_t old_str_ptr;
+            memcpy(&old_str_ptr, &logical_memory[addr + 10], 2);
+            // Guard: only reuse if within current valid heap range
+            if (old_str_ptr >= STRING_HEAP_BASE && old_str_ptr < string_heap_ptr) {
+                uint16_t old_alloc;
+                memcpy(&old_alloc, &logical_memory[old_str_ptr], 2);
+                int new_len = (int)strlen(val.str_val);
+                if (old_alloc > 0 && (uint16_t)(new_len + 1) <= old_alloc) {
+                    // Fits — update string bytes in-place, no heap growth
+                    memcpy(&logical_memory[old_str_ptr + 2], val.str_val, (size_t)(new_len + 1));
+                    logical_memory[addr + 8] = (uint8_t)val.type;
+                    return;
+                }
+            }
+        }
+        // Allocate new heap slot with 2-byte size prefix
         uint16_t str_ptr = string_heap_ptr;
-        int len = strlen(val.str_val);
-        if (str_ptr + len + 1 >= 65536) throw std::runtime_error("String Heap Overflow");
-        memcpy(&logical_memory[str_ptr], val.str_val, len + 1);
-        memcpy(&logical_memory[addr + 8], &str_ptr, 2);
-        string_heap_ptr += (len + 1);
+        int len = (int)strlen(val.str_val);
+        uint16_t alloc_size = (uint16_t)(len + 1);
+        if ((uint32_t)str_ptr + 2 + alloc_size >= 65536u)
+            throw std::runtime_error("String Heap Overflow");
+        logical_memory[str_ptr]     = (uint8_t)(alloc_size & 0xFF);
+        logical_memory[str_ptr + 1] = (uint8_t)(alloc_size >> 8);
+        memcpy(&logical_memory[str_ptr + 2], val.str_val, (size_t)alloc_size);
+        memcpy(&logical_memory[addr + 10], &str_ptr, 2);
+        string_heap_ptr = (uint16_t)(str_ptr + 2 + alloc_size);
+        logical_memory[addr + 8] = (uint8_t)val.type;
+        return;
+    }
+    logical_memory[addr + 8] = (uint8_t)val.type;
+    if (val.type == Value::Type::NUM) {
+        memcpy(&logical_memory[addr + 12], &val.num_val, 4);
+    } else if (val.type == Value::Type::INT) {
+        memcpy(&logical_memory[addr + 12], &val.int_val, 4);
     }
 }
 
 static Value read_compact_value(uint16_t addr) {
     Value v;
-    v.type = (Value::Type)logical_memory[addr + 4];
+    v.type = (Value::Type)logical_memory[addr + 8];
     if (v.type == Value::Type::NUM) {
-        memcpy(&v.num_val, &logical_memory[addr + 8], 4);
+        memcpy(&v.num_val, &logical_memory[addr + 12], 4);
     } else if (v.type == Value::Type::INT) {
-        memcpy(&v.int_val, &logical_memory[addr + 8], 4);
+        memcpy(&v.int_val, &logical_memory[addr + 12], 4);
         v.num_val = (float)v.int_val;
     } else if (v.type == Value::Type::STR) {
         uint16_t str_ptr;
-        memcpy(&str_ptr, &logical_memory[addr + 8], 2);
-        strncpy(v.str_val, (const char*)&logical_memory[str_ptr], 127);
+        memcpy(&str_ptr, &logical_memory[addr + 10], 2);
+        // Skip 2-byte size prefix to reach string data
+        strncpy(v.str_val, (const char*)&logical_memory[str_ptr + 2], 127);
         v.str_val[127] = '\0';
     }
     return v;
 }
 
-// Variables lookup
+// Variables lookup  — active flag at offset 9, name comparison up to 8 chars
 static bool get_variable(const char* name, Value& out_val) {
     for (int i = 0; i < MAX_VARIABLES; ++i) {
         uint16_t addr = MEMORY_VAR_BASE + (i * 16);
-        bool active = logical_memory[addr + 5] != 0;
-        if (active && strncmp((const char*)&logical_memory[addr], name, 4) == 0) {
+        bool active = logical_memory[addr + 9] != 0;
+        if (active && strncmp((const char*)&logical_memory[addr], name, 8) == 0) {
             out_val = read_compact_value(addr);
             return true;
         }
@@ -316,17 +358,17 @@ static bool get_variable(const char* name, Value& out_val) {
 static void set_variable(const char* name, const Value& val) {
     for (int i = 0; i < MAX_VARIABLES; ++i) {
         uint16_t addr = MEMORY_VAR_BASE + (i * 16);
-        bool active = logical_memory[addr + 5] != 0;
-        if (active && strncmp((const char*)&logical_memory[addr], name, 4) == 0) {
+        bool active = logical_memory[addr + 9] != 0;
+        if (active && strncmp((const char*)&logical_memory[addr], name, 8) == 0) {
             write_compact_value(addr, val);
             return;
         }
     }
     for (int i = 0; i < MAX_VARIABLES; ++i) {
         uint16_t addr = MEMORY_VAR_BASE + (i * 16);
-        if (logical_memory[addr + 5] == 0) {
-            logical_memory[addr + 5] = 1;
-            strncpy((char*)&logical_memory[addr], name, 4);
+        if (logical_memory[addr + 9] == 0) {
+            logical_memory[addr + 9] = 1;
+            strncpy((char*)&logical_memory[addr], name, 8);
             write_compact_value(addr, val);
             return;
         }
@@ -334,26 +376,80 @@ static void set_variable(const char* name, const Value& val) {
     throw std::runtime_error("Out of Memory: Too many variables");
 }
 
+// Array record layout (16 bytes per slot):
+//   [0..7]   name (8 bytes)
+//   [8]      active flag
+//   [9]      ndim (1 = 1D, 2 = 2D)
+//   [10..11] dim1 (uint16: rows+1 for 2D, total+1 for 1D)
+//   [12..13] dim2 (uint16: cols+1 for 2D, 0 for 1D)
+//   [14..15] start_addr (uint16)
 struct ArrayRef {
-    char name[4];
+    char name[9];        // up to 8-char name + null terminator
     uint16_t start_addr;
-    uint16_t size;
+    uint16_t dim1;       // 1D: total elements; 2D: rows
+    uint16_t dim2;       // 1D: 0;              2D: cols
+    uint8_t  ndim;       // 1 or 2
     bool active;
+    uint16_t total_size() const {
+        return ndim == 2 ? (uint16_t)(dim1 * dim2) : dim1;
+    }
 };
 
+// Compute flat index for 1D or 2D array access.
+// Pass j=-1 for 1D access.
+static int flatten_array_index(const ArrayRef* arr, int i, int j = -1) {
+    if (j < 0) {
+        if (arr->ndim == 2)
+            throw std::runtime_error("Syntax Error: 2D array requires 2 indices A(row,col)");
+        if (i < 0 || i >= (int)arr->dim1)
+            throw std::runtime_error("Array index out of bounds");
+        return i;
+    } else {
+        if (arr->ndim != 2)
+            throw std::runtime_error("Syntax Error: 1D array requires 1 index A(idx)");
+        if (i < 0 || i >= (int)arr->dim1 || j < 0 || j >= (int)arr->dim2)
+            throw std::runtime_error("Array index out of bounds");
+        return i * (int)arr->dim2 + j;
+    }
+}
+
 static void write_heap_value(uint16_t addr, const Value& val) {
+    if (val.type == Value::Type::STR) {
+        // Try in-place update if this element already holds a string
+        uint8_t old_type = logical_memory[addr];
+        if ((Value::Type)old_type == Value::Type::STR) {
+            uint16_t old_str_ptr;
+            memcpy(&old_str_ptr, &logical_memory[addr + 4], 2);
+            if (old_str_ptr >= STRING_HEAP_BASE && old_str_ptr < string_heap_ptr) {
+                uint16_t old_alloc;
+                memcpy(&old_alloc, &logical_memory[old_str_ptr], 2);
+                int new_len = (int)strlen(val.str_val);
+                if (old_alloc > 0 && (uint16_t)(new_len + 1) <= old_alloc) {
+                    memcpy(&logical_memory[old_str_ptr + 2], val.str_val, (size_t)(new_len + 1));
+                    logical_memory[addr] = (uint8_t)val.type;
+                    return;
+                }
+            }
+        }
+        // New heap slot with 2-byte size prefix
+        uint16_t str_ptr = string_heap_ptr;
+        int len = (int)strlen(val.str_val);
+        uint16_t alloc_size = (uint16_t)(len + 1);
+        if ((uint32_t)str_ptr + 2 + alloc_size >= 65536u)
+            throw std::runtime_error("String Heap Overflow");
+        logical_memory[str_ptr]     = (uint8_t)(alloc_size & 0xFF);
+        logical_memory[str_ptr + 1] = (uint8_t)(alloc_size >> 8);
+        memcpy(&logical_memory[str_ptr + 2], val.str_val, (size_t)alloc_size);
+        memcpy(&logical_memory[addr + 4], &str_ptr, 2);
+        string_heap_ptr = (uint16_t)(str_ptr + 2 + alloc_size);
+        logical_memory[addr] = (uint8_t)val.type;
+        return;
+    }
     logical_memory[addr] = (uint8_t)val.type;
     if (val.type == Value::Type::NUM) {
         memcpy(&logical_memory[addr + 4], &val.num_val, 4);
     } else if (val.type == Value::Type::INT) {
         memcpy(&logical_memory[addr + 4], &val.int_val, 4);
-    } else if (val.type == Value::Type::STR) {
-        uint16_t str_ptr = string_heap_ptr;
-        int len = strlen(val.str_val);
-        if (str_ptr + len + 1 >= 65536) throw std::runtime_error("String Heap Overflow");
-        memcpy(&logical_memory[str_ptr], val.str_val, len + 1);
-        memcpy(&logical_memory[addr + 4], &str_ptr, 2);
-        string_heap_ptr += (len + 1);
     }
 }
 
@@ -368,7 +464,8 @@ static Value read_heap_value(uint16_t addr) {
     } else if (v.type == Value::Type::STR) {
         uint16_t str_ptr;
         memcpy(&str_ptr, &logical_memory[addr + 4], 2);
-        strncpy(v.str_val, (const char*)&logical_memory[str_ptr], 127);
+        // Skip 2-byte size prefix to reach string data
+        strncpy(v.str_val, (const char*)&logical_memory[str_ptr + 2], 127);
         v.str_val[127] = '\0';
     }
     return v;
@@ -378,12 +475,15 @@ static ArrayRef* get_array(const char* name) {
     static ArrayRef temp_arr;
     for (int i = 0; i < MAX_VARIABLES; ++i) {
         uint16_t addr = ARRAY_TABLE_BASE + (i * 16);
-        bool active = logical_memory[addr + 5] != 0;
-        if (active && strncmp((const char*)&logical_memory[addr], name, 4) == 0) {
-            strncpy(temp_arr.name, (const char*)&logical_memory[addr], 4);
-            temp_arr.active = true;
-            memcpy(&temp_arr.size, &logical_memory[addr + 6], 2);
-            memcpy(&temp_arr.start_addr, &logical_memory[addr + 8], 2);
+        bool active = logical_memory[addr + 8] != 0;
+        if (active && strncmp((const char*)&logical_memory[addr], name, 8) == 0) {
+            strncpy(temp_arr.name, (const char*)&logical_memory[addr], 8);
+            temp_arr.name[8] = '\0';
+            temp_arr.active  = true;
+            temp_arr.ndim    = logical_memory[addr + 9];
+            memcpy(&temp_arr.dim1,       &logical_memory[addr + 10], 2);
+            memcpy(&temp_arr.dim2,       &logical_memory[addr + 12], 2);
+            memcpy(&temp_arr.start_addr, &logical_memory[addr + 14], 2);
             return &temp_arr;
         }
     }
@@ -450,7 +550,8 @@ static bool is_builtin_function(const char* name) {
            strcmp(name, "LEN") == 0 || strcmp(name, "MID$") == 0 || 
            strcmp(name, "LEFT$") == 0 || strcmp(name, "RIGHT$") == 0 ||
            strcmp(name, "CHR$") == 0 || strcmp(name, "ASC") == 0 ||
-           strcmp(name, "VAL") == 0 || strcmp(name, "STR$") == 0;
+           strcmp(name, "VAL") == 0 || strcmp(name, "STR$") == 0 ||
+           strcmp(name, "TOUCH") == 0;
 }
 
 static Value evaluate_builtin_function(const char* var_name, Value* args, int arg_count) {
@@ -546,6 +647,15 @@ static Value evaluate_builtin_function(const char* var_name, Value* args, int ar
         char buf[32];
         snprintf(buf, sizeof(buf), "%g", args[0].num_val);
         return Value(buf);
+    } else if (strcmp(var_name, "TOUCH") == 0) {
+        if (arg_count != 1 || args[0].type != Value::Type::NUM) throw std::runtime_error("Type Mismatch/Arg Count in TOUCH");
+        int n = static_cast<int>(args[0].num_val);
+        switch (n) {
+            case 0: return Value((float)hal_touch_get_x());
+            case 1: return Value((float)hal_touch_get_y());
+            case 2: return Value((float)hal_touch_is_touched());
+            default: throw std::runtime_error("TOUCH argument must be 0, 1, or 2");
+        }
     }
     throw std::runtime_error("Unknown Function");
 }
@@ -604,16 +714,24 @@ static Value parse_factor(const TokenList& tokens, int& pos) {
                 return evaluate_builtin_function(var_name, args, arg_count);
             }
 
-            // Fallback: Array lookup
-            if (arg_count != 1) throw std::runtime_error("Syntax Error: Multidimensional arrays not supported yet");
-            if (args[0].type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: Array index must be numeric");
-            
-            int idx = static_cast<int>(args[0].num_val);
+            // Fallback: 1D or 2D array lookup
             ArrayRef* arr = get_array(var_name);
             if (!arr) throw std::runtime_error("Array not dimensioned");
-            if (idx < 0 || idx >= arr->size) throw std::runtime_error("Out of bounds");
-
-            return read_heap_value(arr->start_addr + (idx * 8));
+            int flat_idx;
+            if (arg_count == 1) {
+                if (args[0].type != Value::Type::NUM)
+                    throw std::runtime_error("Type Mismatch: Array index must be numeric");
+                flat_idx = flatten_array_index(arr, static_cast<int>(args[0].num_val));
+            } else if (arg_count == 2) {
+                if (args[0].type != Value::Type::NUM || args[1].type != Value::Type::NUM)
+                    throw std::runtime_error("Type Mismatch: Array index must be numeric");
+                flat_idx = flatten_array_index(arr,
+                    static_cast<int>(args[0].num_val),
+                    static_cast<int>(args[1].num_val));
+            } else {
+                throw std::runtime_error("Syntax Error: Arrays support 1 or 2 dimensions");
+            }
+            return read_heap_value(arr->start_addr + (flat_idx * 8));
         }
         
         // Scalar variable
@@ -806,14 +924,20 @@ static void execute_read(const TokenList& tokens, int& pos) {
         var_name[sizeof(var_name)-1] = '\0';
         pos++;
         
-        int arr_idx = -1;
+        int arr_idx = -1, arr_idx2 = -1;
         if (pos < tokens.size && tokens.tokens[pos].type == TokenType::LPAREN) {
             pos++;
             Value idx_val = parse_relation(tokens, pos);
             if (idx_val.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: Array index");
+            arr_idx = static_cast<int>(idx_val.num_val);
+            if (pos < tokens.size && tokens.tokens[pos].type == TokenType::COMMA) {
+                pos++;
+                Value idx2_val = parse_relation(tokens, pos);
+                if (idx2_val.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: Array index");
+                arr_idx2 = static_cast<int>(idx2_val.num_val);
+            }
             require_token(tokens, pos, TokenType::RPAREN, "Syntax Error: Expected ')'");
             pos++;
-            arr_idx = static_cast<int>(idx_val.num_val);
         }
         
         if (data_ptr >= data_buffer_size) throw std::runtime_error("Out of DATA");
@@ -830,8 +954,8 @@ static void execute_read(const TokenList& tokens, int& pos) {
         if (arr_idx >= 0) {
             ArrayRef* arr = get_array(var_name);
             if (!arr) throw std::runtime_error("Array not dimensioned");
-            if (arr_idx < 0 || arr_idx >= arr->size) throw std::runtime_error("Out of bounds");
-            write_heap_value(arr->start_addr + (arr_idx * 8), val);
+            int flat_idx = flatten_array_index(arr, arr_idx, arr_idx2);
+            write_heap_value(arr->start_addr + (flat_idx * 8), val);
         } else {
             set_variable(var_name, val);
         }
@@ -903,8 +1027,8 @@ static void execute_if(const TokenList& tokens, int& pos) {
             pos++; // Consume ELSE
             execute_statement(tokens, pos);
         } else {
-            // No ELSE, skip rest of line
-            branch_taken = true; 
+            // No ELSE: condition is false, skip rest of this line and fall through to next
+            pos = tokens.size;
         }
     }
 }
@@ -989,50 +1113,73 @@ static void execute_dim(const TokenList& tokens, int& pos) {
     
     require_token(tokens, pos, TokenType::LPAREN, "Syntax Error: Expected '(' after DIM variable");
     pos++;
-    Value size_val = parse_relation(tokens, pos);
-    if (size_val.type != Value::Type::NUM || size_val.num_val < 0) throw std::runtime_error("Syntax Error: Invalid Array Size");
-    
+    Value size1_val = parse_relation(tokens, pos);
+    if (size1_val.type != Value::Type::NUM || size1_val.num_val < 0)
+        throw std::runtime_error("Syntax Error: Invalid Array Size");
+    int dim1_count = static_cast<int>(size1_val.num_val) + 1;
+
+    // Check for second dimension (2D array)
+    int dim2_count = 0;
+    if (pos < tokens.size && tokens.tokens[pos].type == TokenType::COMMA) {
+        pos++;
+        Value size2_val = parse_relation(tokens, pos);
+        if (size2_val.type != Value::Type::NUM || size2_val.num_val < 0)
+            throw std::runtime_error("Syntax Error: Invalid Array Size");
+        dim2_count = static_cast<int>(size2_val.num_val) + 1;
+    }
+
     require_token(tokens, pos, TokenType::RPAREN, "Syntax Error: Expected ')' in DIM");
     pos++;
-    
-    int arr_size_count = static_cast<int>(size_val.num_val) + 1;
-    uint16_t total_bytes = arr_size_count * 8;
-    if (array_heap_inner_ptr + total_bytes > STRING_HEAP_BASE) throw std::runtime_error("Out of Memory: Array Heap Full");
 
+    int ndim           = (dim2_count > 0) ? 2 : 1;
+    int arr_size_count = (ndim == 2) ? dim1_count * dim2_count : dim1_count;
+    uint16_t total_bytes = (uint16_t)(arr_size_count * 8);
+    if (array_heap_inner_ptr + total_bytes > STRING_HEAP_BASE)
+        throw std::runtime_error("Out of Memory: Array Heap Full");
+
+    // Find existing or allocate new array table slot
     uint16_t table_addr = 0xFFFF;
     for (int i = 0; i < MAX_VARIABLES; ++i) {
         uint16_t addr = ARRAY_TABLE_BASE + (i * 16);
-        if (logical_memory[addr + 5] != 0 && strncmp((const char*)&logical_memory[addr], var_name, 4) == 0) {
+        if (logical_memory[addr + 8] != 0 &&
+            strncmp((const char*)&logical_memory[addr], var_name, 8) == 0) {
             table_addr = addr;
             break;
         }
     }
-    
     if (table_addr == 0xFFFF) {
         for (int i = 0; i < MAX_VARIABLES; ++i) {
             uint16_t addr = ARRAY_TABLE_BASE + (i * 16);
-            if (logical_memory[addr + 5] == 0) {
+            if (logical_memory[addr + 8] == 0) {
                 table_addr = addr;
                 break;
             }
         }
     }
-
     if (table_addr == 0xFFFF) throw std::runtime_error("Out of Memory: Too many arrays");
-    
-    uint16_t start_addr = array_heap_inner_ptr;
-    uint16_t arr_size_uint16 = (uint16_t)arr_size_count;
 
-    logical_memory[table_addr + 5] = 1;
-    strncpy((char*)&logical_memory[table_addr], var_name, 4);
-    memcpy(&logical_memory[table_addr + 6], &arr_size_uint16, 2);
-    memcpy(&logical_memory[table_addr + 8], &start_addr, 2);
-    
+    uint16_t start_addr  = array_heap_inner_ptr;
+    uint16_t dim1_u16    = (uint16_t)dim1_count;
+    uint16_t dim2_u16    = (uint16_t)dim2_count;
+
+    // Write array record (new layout)
+    logical_memory[table_addr + 8] = 1;              // active
+    logical_memory[table_addr + 9] = (uint8_t)ndim;  // ndim
+    strncpy((char*)&logical_memory[table_addr], var_name, 8);
+    memcpy(&logical_memory[table_addr + 10], &dim1_u16,    2);
+    memcpy(&logical_memory[table_addr + 12], &dim2_u16,    2);
+    memcpy(&logical_memory[table_addr + 14], &start_addr,  2);
+
     array_heap_inner_ptr += total_bytes;
+
+    // Zero the freshly allocated data area so old garbage doesn't misfire
+    // the in-place string update check in write_heap_value.
+    memset(&logical_memory[start_addr], 0, total_bytes);
 
     int nlen = strlen(var_name);
     Value default_val = (nlen > 0 && var_name[nlen-1] == '$') ? Value("") : Value(0.0f);
-    for (int i=0; i<arr_size_count; i++) write_heap_value(start_addr + (i * 8), default_val);
+    for (int i = 0; i < arr_size_count; i++)
+        write_heap_value(start_addr + (i * 8), default_val);
 }
 
 static void execute_assignment(const TokenList& tokens, int& pos, bool explicit_let) {
@@ -1045,14 +1192,20 @@ static void execute_assignment(const TokenList& tokens, int& pos, bool explicit_
     var_name[sizeof(var_name)-1] = '\0';
     pos++;
     
-    int arr_idx = -1;
+    int arr_idx = -1, arr_idx2 = -1;
     if (pos < tokens.size && tokens.tokens[pos].type == TokenType::LPAREN) {
         pos++;
         Value idx_val = parse_relation(tokens, pos);
         if (idx_val.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: Array index");
+        arr_idx = static_cast<int>(idx_val.num_val);
+        if (pos < tokens.size && tokens.tokens[pos].type == TokenType::COMMA) {
+            pos++;
+            Value idx2_val = parse_relation(tokens, pos);
+            if (idx2_val.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: Array index");
+            arr_idx2 = static_cast<int>(idx2_val.num_val);
+        }
         require_token(tokens, pos, TokenType::RPAREN, "Syntax Error: Expected ')'");
         pos++;
-        arr_idx = static_cast<int>(idx_val.num_val);
     }
     
     require_token(tokens, pos, TokenType::ASSIGN, "Syntax Error: Expected assignment");
@@ -1075,8 +1228,8 @@ static void execute_assignment(const TokenList& tokens, int& pos, bool explicit_
     if (arr_idx >= 0) {
         ArrayRef* arr = get_array(var_name);
         if (!arr) throw std::runtime_error("Array not dimensioned");
-        if (arr_idx < 0 || arr_idx >= arr->size) throw std::runtime_error("Out of bounds");
-        write_heap_value(arr->start_addr + (arr_idx * 8), result);
+        int flat_idx = flatten_array_index(arr, arr_idx, arr_idx2);
+        write_heap_value(arr->start_addr + (flat_idx * 8), result);
     } else {
         set_variable(var_name, result);
     }
@@ -1102,14 +1255,20 @@ static void execute_input(const TokenList& tokens, int& pos) {
         var_name[sizeof(var_name)-1] = '\0';
         pos++;
         
-        int arr_idx = -1;
+        int arr_idx = -1, arr_idx2 = -1;
         if (pos < tokens.size && tokens.tokens[pos].type == TokenType::LPAREN) {
             pos++;
             Value idx_val = parse_relation(tokens, pos);
             if (idx_val.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: Array index");
+            arr_idx = static_cast<int>(idx_val.num_val);
+            if (pos < tokens.size && tokens.tokens[pos].type == TokenType::COMMA) {
+                pos++;
+                Value idx2_val = parse_relation(tokens, pos);
+                if (idx2_val.type != Value::Type::NUM) throw std::runtime_error("Type Mismatch: Array index");
+                arr_idx2 = static_cast<int>(idx2_val.num_val);
+            }
             require_token(tokens, pos, TokenType::RPAREN, "Syntax Error: Expected ')'");
             pos++;
-            arr_idx = static_cast<int>(idx_val.num_val);
         }
         
         char in_buf[128] = "";
@@ -1130,8 +1289,8 @@ static void execute_input(const TokenList& tokens, int& pos) {
         if (arr_idx >= 0) {
             ArrayRef* arr = get_array(var_name);
             if (!arr) throw std::runtime_error("Array not dimensioned");
-            if (arr_idx < 0 || arr_idx >= arr->size) throw std::runtime_error("Out of bounds");
-            write_heap_value(arr->start_addr + (arr_idx * 8), val);
+            int flat_idx = flatten_array_index(arr, arr_idx, arr_idx2);
+            write_heap_value(arr->start_addr + (flat_idx * 8), val);
         } else {
             set_variable(var_name, val);
         }
@@ -1489,9 +1648,64 @@ static void execute_load(const TokenList& tokens, int& pos) {
     hal_display_print("Loaded\n");
 }
 
+static void execute_kill(const TokenList& tokens, int& pos) {
+    pos++; // skip KILL
+    require_token(tokens, pos, TokenType::STRING, "Syntax Error: KILL expects filename string");
+    const char* filename = tokens.tokens[pos].text;
+    pos++;
+    
+    if (remove(filename) != 0) {
+        throw std::runtime_error("File Error: Cannot delete file");
+    }
+    hal_display_print("Deleted\n");
+}
+
+static void execute_name(const TokenList& tokens, int& pos) {
+    pos++; // skip NAME
+    require_token(tokens, pos, TokenType::STRING, "Syntax Error: NAME expects old filename string");
+    char oldname[128];
+    strncpy(oldname, tokens.tokens[pos].text, sizeof(oldname)-1);
+    pos++;
+    
+    require_token(tokens, pos, TokenType::AS, "Syntax Error: Expected AS in NAME command");
+    pos++;
+    
+    require_token(tokens, pos, TokenType::STRING, "Syntax Error: NAME expects new filename string");
+    const char* newname = tokens.tokens[pos].text;
+    pos++;
+    
+    if (rename(oldname, newname) != 0) {
+        throw std::runtime_error("File Error: Cannot rename file");
+    }
+    hal_display_print("Renamed\n");
+}
+
 static void execute_files(const TokenList& tokens, int& pos) {
     pos++; // skip FILES
-    hal_display_print("FILES command not yet supported on Host (Phase 3 placeholder)\n");
+    
+    DIR* dir = opendir(".");
+    if (dir == NULL) {
+        hal_display_print("Error: Cannot open directory\n");
+        return;
+    }
+    
+    struct dirent* entry;
+    int count = 0;
+    char buf[128];
+    while ((entry = readdir(dir)) != NULL) {
+        // Skip hidden files
+        if (entry->d_name[0] == '.') continue;
+        
+        snprintf(buf, sizeof(buf), "%-16s", entry->d_name);
+        hal_display_print(buf);
+        count++;
+        if (count % 4 == 0) hal_display_print("\n");
+    }
+    if (count % 4 != 0) hal_display_print("\n");
+    
+    closedir(dir);
+    snprintf(buf, sizeof(buf), "%d File(s) found\n", count);
+    hal_display_print(buf);
 }
 
 static void execute_on(const TokenList& tokens, int& pos) {
@@ -1698,6 +1912,9 @@ static void execute_statement(const TokenList& tokens, int& pos) {
         case TokenType::GOSUB:   execute_gosub(tokens, pos); break;
         case TokenType::RETURN:  execute_return(tokens, pos); break;
         case TokenType::IF:      execute_if(tokens, pos); break;
+        case TokenType::FILES:   execute_files(tokens, pos); break;
+        case TokenType::KILL:    execute_kill(tokens, pos); break;
+        case TokenType::NAME:    execute_name(tokens, pos); break;
         case TokenType::ON:      execute_on(tokens, pos); break;
         case TokenType::FOR:     execute_for(tokens, pos); break;
         case TokenType::NEXT:    execute_next(tokens, pos); break;
@@ -1728,13 +1945,13 @@ static void execute_statement(const TokenList& tokens, int& pos) {
         case TokenType::GET_AT:  execute_get_at(tokens, pos); break;
         case TokenType::PUT_AT:  execute_put_at(tokens, pos); break;
         
-        case TokenType::FILES:   execute_files(tokens, pos); break;
         case TokenType::INIT: case TokenType::NEWON:
         case TokenType::WIDTH: case TokenType::CONSOLE:
         case TokenType::REPEAT: case TokenType::UNTIL: case TokenType::GET:
         case TokenType::WINDOW:
         case TokenType::POLY:    execute_not_implemented(tokens, pos); break;
         case TokenType::BEEP:    execute_beep(tokens, pos); break;
+        case TokenType::PLAY:    execute_music(tokens, pos); break; // PLAY is Hu-BASIC alias for MUSIC (MML)
         case TokenType::MUSIC:   execute_music(tokens, pos); break;
         case TokenType::SOUND:   execute_sound(tokens, pos); break;
 

@@ -1,5 +1,6 @@
 #include "hal_display.h"
 #include "hal_gpio.h"
+#include "hal_touch.h"
 #include "mock_hal_display.h"
 #include <vector>
 #include <string>
@@ -175,3 +176,37 @@ void hal_display_set_mock_input(const char* input) {
 void hal_system_wait(int ms) {
     if (ms > 0) usleep(ms * 1000);
 }
+
+// ---------------------------------------------------------
+// Touch HAL mock — injectable state for unit tests
+// ---------------------------------------------------------
+static int mock_touch_state = 0;
+static int mock_touch_x     = 0;
+static int mock_touch_y     = 0;
+
+void hal_touch_init() {
+    mock_touch_state = 0;
+    mock_touch_x     = 0;
+    mock_touch_y     = 0;
+}
+
+int hal_touch_is_touched() {
+    return mock_touch_state;
+}
+
+int hal_touch_get_x() {
+    return mock_touch_x;
+}
+
+int hal_touch_get_y() {
+    return mock_touch_y;
+}
+
+namespace mock_hal {
+void set_touch_state(int touched, int x, int y) {
+    mock_touch_state = touched;
+    mock_touch_x     = x;
+    mock_touch_y     = y;
+}
+} // namespace mock_hal (touch injection)
+

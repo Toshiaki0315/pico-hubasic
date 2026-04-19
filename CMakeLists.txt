@@ -26,6 +26,7 @@ if(BUILD_TESTS)
     add_library(core_lib
         src/lexer.cpp
         src/parser.cpp
+        src/hal_touch.cpp
     )
     target_include_directories(core_lib PUBLIC src)
 
@@ -42,6 +43,8 @@ if(BUILD_TESTS)
         tests/test_builtin_functions_ext.cpp
         tests/test_advanced_features.cpp
         tests/test_sound_logic.cpp
+        tests/test_touch_play.cpp
+        tests/test_2d_array_longvar_string.cpp
         tests/mock_hal_display.cpp
         src/hal_gpio.cpp
         src/hal_sound.cpp

@@ -146,6 +146,9 @@ TokenList lex(const char* source) {
             else if (strcmp(upper_ident, "FILES") == 0) t.type = TokenType::FILES;
             else if (strcmp(upper_ident, "SAVE") == 0) t.type = TokenType::SAVE;
             else if (strcmp(upper_ident, "LOAD") == 0) t.type = TokenType::LOAD;
+            else if (strcmp(upper_ident, "KILL") == 0) t.type = TokenType::KILL;
+            else if (strcmp(upper_ident, "NAME") == 0) t.type = TokenType::NAME;
+            else if (strcmp(upper_ident, "AS") == 0) t.type = TokenType::AS;
             else if (strcmp(upper_ident, "ON") == 0) t.type = TokenType::ON;
             else if (strcmp(upper_ident, "GPIO") == 0) t.type = TokenType::GPIO;
             else if (strcmp(upper_ident, "WINDOW") == 0) t.type = TokenType::WINDOW;
@@ -160,6 +163,7 @@ TokenList lex(const char* source) {
             else if (strcmp(upper_ident, "BRIGHTNESS") == 0) t.type = TokenType::BRIGHTNESS;
             else if (strcmp(upper_ident, "WAIT") == 0) t.type = TokenType::WAIT;
             else if (strcmp(upper_ident, "BEEP") == 0) t.type = TokenType::BEEP;
+            else if (strcmp(upper_ident, "PLAY") == 0) t.type = TokenType::PLAY;
             else if (strcmp(upper_ident, "MUSIC") == 0) t.type = TokenType::MUSIC;
             else if (strcmp(upper_ident, "SOUND") == 0) t.type = TokenType::SOUND;
             else if (strcmp(upper_ident, "ABS") == 0 || strcmp(upper_ident, "INT") == 0 || strcmp(upper_ident, "RND") == 0 ||
@@ -170,24 +174,26 @@ TokenList lex(const char* source) {
                      strcmp(upper_ident, "LEFT$") == 0 || strcmp(upper_ident, "RIGHT$") == 0 ||
                      strcmp(upper_ident, "CHR$") == 0 || strcmp(upper_ident, "ASC") == 0 ||
                      strcmp(upper_ident, "VAL") == 0 || strcmp(upper_ident, "STR$") == 0 ||
-                     strcmp(upper_ident, "TAB") == 0) {} // Built-in functions bypass variable checks
+                     strcmp(upper_ident, "TAB") == 0 ||
+                     strcmp(upper_ident, "TOUCH") == 0) {} // Built-in functions bypass variable checks
             else {
-                // Not a keyword. Check strict variable name rules: [A-Z][0-9]?[$%]?
-                bool valid = true;
-                if (text_len > 3) valid = false;
-                else if (text_len == 1) { 
+                // Variable name rules: [A-Z][A-Z0-9]*[%$]? with max 8 characters total
+                // Examples: A, B$, X0%, SCORE, NAME$, COUNT%
+                bool valid = (text_len >= 1 && text_len <= 8);
+                if (valid) {
                     if (!std::isalpha(upper_ident[0])) valid = false;
+                    // Determine where the base name ends (before optional sigil)
+                    int base_end = (int)text_len;
+                    if (valid && text_len > 0 &&
+                        (upper_ident[text_len - 1] == '$' || upper_ident[text_len - 1] == '%')) {
+                        base_end = (int)text_len - 1;
+                        if (base_end == 0) valid = false; // bare sigil alone is invalid
+                    }
+                    // All non-sigil characters after the first must be alphanumeric
+                    for (int k = 1; k < base_end && valid; k++) {
+                        if (!std::isalnum(upper_ident[k])) valid = false;
+                    }
                 }
-                else if (text_len == 2) {
-                    if (!std::isalpha(upper_ident[0])) valid = false;
-                    else if (!std::isdigit(upper_ident[1]) && upper_ident[1] != '$' && upper_ident[1] != '%') valid = false;
-                }
-                else if (text_len == 3) {
-                    if (!std::isalpha(upper_ident[0])) valid = false;
-                    else if (!std::isdigit(upper_ident[1])) valid = false;
-                    else if (upper_ident[2] != '$' && upper_ident[2] != '%') valid = false;
-                }
-                
                 if (!valid) {
                     throw std::runtime_error("Syntax Error: Invalid variable name");
                 }

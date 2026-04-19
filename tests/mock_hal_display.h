@@ -41,4 +41,7 @@ void reset();
 // Check if clear screen was called
 bool was_cls_called();
 
+// Inject touch state for TOUCH() function tests
+void set_touch_state(int touched, int x, int y);
+
 } // namespace mock_hal
