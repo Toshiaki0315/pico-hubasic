@@ -3,13 +3,13 @@
 #include "hal_gpio.h"
 #include "hal_sound.h"
 #include "hal_touch.h"
+#include "hal_sdcard.h"
 #include <stdio.h>
 #include <stdexcept>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <cctype>
-#include <dirent.h>
 
 // ---------------------------------------------------------
 // Data Representation
@@ -1592,7 +1592,7 @@ static void execute_save(const TokenList& tokens, int& pos) {
     const char* filename = tokens.tokens[pos].text;
     pos++;
     
-    FILE* fp = fopen(filename, "w");
+    void* fp = hal_file_open(filename, "w");
     if (!fp) throw std::runtime_error("File Error: Cannot open file for writing");
     
     uint16_t ptr = MEMORY_TEXT_BASE;
@@ -1601,21 +1601,21 @@ static void execute_save(const TokenList& tokens, int& pos) {
         if (logical_memory[ptr+2] == 0 && logical_memory[ptr+3] == 0 && ptr != MEMORY_TEXT_BASE) break;
 
         uint16_t line_num = logical_memory[ptr+2] | (logical_memory[ptr+3] << 8);
-        fprintf(fp, "%d ", line_num);
+        hal_file_printf(fp, "%d ", line_num);
         
         TokenList t = detokenize(&logical_memory[ptr+4]);
         for (int i=0; i<t.size; i++) {
             if (t.tokens[i].type == TokenType::END_OF_FILE) break;
-            if (t.tokens[i].type == TokenType::STRING) fprintf(fp, "\"%s\" ", t.tokens[i].text);
-            else fprintf(fp, "%s ", t.tokens[i].text);
+            if (t.tokens[i].type == TokenType::STRING) hal_file_printf(fp, "\"%s\" ", t.tokens[i].text);
+            else hal_file_printf(fp, "%s ", t.tokens[i].text);
         }
-        fprintf(fp, "\n");
+        hal_file_printf(fp, "\n");
         
         uint16_t next_ptr = logical_memory[ptr] | (logical_memory[ptr+1] << 8);
         if (next_ptr == 0) break;
         ptr = next_ptr;
     }
-    fclose(fp);
+    hal_file_close(fp);
     hal_display_print("Saved\n");
 }
 
@@ -1625,12 +1625,12 @@ static void execute_load(const TokenList& tokens, int& pos) {
     const char* filename = tokens.tokens[pos].text;
     pos++;
     
-    FILE* fp = fopen(filename, "r");
+    void* fp = hal_file_open(filename, "r");
     if (!fp) throw std::runtime_error("File Error: Cannot open file for reading");
     
     clear_program();
     char line_buf[256];
-    while (fgets(line_buf, sizeof(line_buf), fp)) {
+    while (hal_file_gets(line_buf, sizeof(line_buf), fp)) {
         TokenList t = lex(line_buf);
         if (t.size > 0 && t.tokens[0].type == TokenType::NUMBER) {
             int line_num = atoi(t.tokens[0].text);
@@ -1644,7 +1644,7 @@ static void execute_load(const TokenList& tokens, int& pos) {
             store_line(line_num, remainder);
         }
     }
-    fclose(fp);
+    hal_file_close(fp);
     hal_display_print("Loaded\n");
 }
 
@@ -1654,7 +1654,7 @@ static void execute_kill(const TokenList& tokens, int& pos) {
     const char* filename = tokens.tokens[pos].text;
     pos++;
     
-    if (remove(filename) != 0) {
+    if (hal_file_remove(filename) != 0) {
         throw std::runtime_error("File Error: Cannot delete file");
     }
     hal_display_print("Deleted\n");
@@ -1674,7 +1674,7 @@ static void execute_name(const TokenList& tokens, int& pos) {
     const char* newname = tokens.tokens[pos].text;
     pos++;
     
-    if (rename(oldname, newname) != 0) {
+    if (hal_file_rename(oldname, newname) != 0) {
         throw std::runtime_error("File Error: Cannot rename file");
     }
     hal_display_print("Renamed\n");
@@ -1683,27 +1683,27 @@ static void execute_name(const TokenList& tokens, int& pos) {
 static void execute_files(const TokenList& tokens, int& pos) {
     pos++; // skip FILES
     
-    DIR* dir = opendir(".");
+    void* dir = hal_dir_open(".");
     if (dir == NULL) {
         hal_display_print("Error: Cannot open directory\n");
         return;
     }
     
-    struct dirent* entry;
+    const char* d_name;
     int count = 0;
     char buf[128];
-    while ((entry = readdir(dir)) != NULL) {
+    while ((d_name = hal_dir_read(dir)) != NULL) {
         // Skip hidden files
-        if (entry->d_name[0] == '.') continue;
+        if (d_name[0] == '.') continue;
         
-        snprintf(buf, sizeof(buf), "%-16s", entry->d_name);
+        snprintf(buf, sizeof(buf), "%-16s", d_name);
         hal_display_print(buf);
         count++;
         if (count % 4 == 0) hal_display_print("\n");
     }
     if (count % 4 != 0) hal_display_print("\n");
     
-    closedir(dir);
+    hal_dir_close(dir);
     snprintf(buf, sizeof(buf), "%d File(s) found\n", count);
     hal_display_print(buf);
 }

@@ -27,6 +27,7 @@ if(BUILD_TESTS)
         src/lexer.cpp
         src/parser.cpp
         src/hal_touch.cpp
+        src/hal_sdcard.cpp
     )
     target_include_directories(core_lib PUBLIC src)
 
@@ -75,6 +76,7 @@ else()
         src/hal_gpio.cpp
         src/hal_sound.cpp
         src/hal_touch.cpp
+        src/hal_sdcard.cpp
         src/repl.cpp
         src/lexer.cpp
         src/parser.cpp

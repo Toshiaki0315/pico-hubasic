@@ -21,15 +21,15 @@ TEST_F(FileOpsTest, SaveAndLoadProgram) {
     store_line(10, lex("A = 10"));
     store_line(20, lex("PRINT A * 2"));
     
-    // 2. Save it
-    parse_and_execute(lex("SAVE \"test_save.bas\""));
+    // 2. Save it with 0: prefix
+    parse_and_execute(lex("SAVE \"0:test_save.bas\""));
     mock_hal::reset();
     
     // 3. Clear program
     parse_and_execute(lex("NEW"));
     
-    // 4. Load it
-    parse_and_execute(lex("LOAD \"test_save.bas\""));
+    // 4. Load it with CAS: prefix
+    parse_and_execute(lex("LOAD \"CAS:test_save.bas\""));
     mock_hal::reset();
     
     // 5. Run it and verify output
