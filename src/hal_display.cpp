@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include "hal_font.h"
 
-#ifdef PICO_BOARD
+#if __has_include("pico/stdlib.h")
 #include "pico/stdlib.h"
 #include "hardware/spi.h"
 #include "hardware/pwm.h"

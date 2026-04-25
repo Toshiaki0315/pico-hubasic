@@ -2,6 +2,8 @@
 
 `src/parser.cpp` / `src/lexer.cpp` とホスト単体テスト（`BUILD_TESTS=ON`）の整理に基づく一覧です。実機（Pico）では HAL のスタブ／未リンク箇所により挙動が異なる場合があります。
 
+開発フェーズ全体との対応は **[PHASE_RUNTIME.md](./PHASE_RUNTIME.md)**、Hu-BASIC との差分は **[RUNTIME_GAPS.md](./RUNTIME_GAPS.md)** を参照してください。
+
 ## 凡例
 
 | 記号 | 意味 |
