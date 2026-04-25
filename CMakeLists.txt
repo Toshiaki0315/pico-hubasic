@@ -62,8 +62,8 @@ if(BUILD_TESTS)
 else()
     message(STATUS "🍓 Building for Pico RP2350 target")
     
-    # Define the target board before SDK initialization
-    set(PICO_BOARD waveshare_rp2350_touch_lcd_2_8 CACHE STRING "Board type")
+    # Define the target board before SDK initialization (RP2350 default is pico2)
+    set(PICO_BOARD pico2 CACHE STRING "Board type")
 
     include(pico_sdk_import.cmake OPTIONAL)
 
