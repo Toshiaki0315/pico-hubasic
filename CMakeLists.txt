@@ -1,4 +1,7 @@
 cmake_minimum_required(VERSION 3.14)
+if(POLICY CMP0135)
+    cmake_policy(SET CMP0135 NEW)
+endif()
 
 project(pico_basic C CXX ASM)
 
@@ -59,6 +62,9 @@ if(BUILD_TESTS)
 else()
     message(STATUS "🍓 Building for Pico RP2350 target")
     
+    # Define the target board before SDK initialization
+    set(PICO_BOARD waveshare_rp2350_touch_lcd_2_8 CACHE STRING "Board type")
+
     include(pico_sdk_import.cmake OPTIONAL)
 
     if (COMMAND pico_sdk_init)
@@ -66,9 +72,6 @@ else()
     else()
         message(WARNING "pico_sdk_import.cmake is not found. Please ensure Raspberry Pi Pico SDK is configured properly.")
     endif()
-
-    # Define the RP2350 target
-    set(PICO_BOARD waveshare_rp2350_touch_lcd_2_8 CACHE STRING "Board type")
 
     add_executable(pico_basic
         src/main.cpp
@@ -81,10 +84,6 @@ else()
         src/lexer.cpp
         src/parser.cpp
     )
-
-    if (COMMAND pico_set_target_board)
-        pico_set_target_board(pico_basic ${PICO_BOARD})
-    endif()
 
     if (TARGET pico_stdlib)
         target_link_libraries(pico_basic
