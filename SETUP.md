@@ -161,6 +161,11 @@ cmake --build build_host --parallel
 
 GitHub 上では `.github/workflows/ci.yml` が同様に `BUILD_TESTS=ON` でビルドし、`basic_tests` を実行します。
 
+### 8.4 品質ドキュメント（失敗時フロー・実機チェック）
+
+- **[docs/TESTING.md](./docs/TESTING.md)** … テストの定期実行、`--gtest_filter`、CI 失敗時の修正フロー
+- **[docs/DEVICE_CHECKLIST.md](./docs/DEVICE_CHECKLIST.md)** … USB / LCD / SD 等の手動確認チェックリスト
+
 ---
 
 **トラブルシューティング**

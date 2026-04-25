@@ -4,7 +4,8 @@
 
 1980年代のマイコンの熱気を、現代のパワフルなマイクロコントローラで蘇らせることを目的としています。コア言語・グラフィック・サウンド・ファイル API などは `parser` と HAL で実装が進んでおり、Pico 実機では MicroSD（FatFS）統合や一部命令の完成度を高める作業が続いています。
 
-命令の実装状況の一覧は [docs/COMMAND_STATUS.md](./docs/COMMAND_STATUS.md) を参照してください。ユーザ向けの詳細な説明は [MANUAL.md](./MANUAL.md) です。
+命令の実装状況の一覧は [docs/COMMAND_STATUS.md](./docs/COMMAND_STATUS.md) を参照してください。ユーザ向けの詳細な説明は [MANUAL.md](./MANUAL.md) です。  
+テスト実行・CI 失敗時の扱いは [docs/TESTING.md](./docs/TESTING.md)、実機の手動確認は [docs/DEVICE_CHECKLIST.md](./docs/DEVICE_CHECKLIST.md) を参照してください。
 
 ## 🎯 ターゲットハードウェア
 
@@ -18,7 +19,7 @@
 
 ```text
 ├── .agent/           # AI エージェント向け仕様・プロンプト
-├── docs/             # 開発者向け補助ドキュメント（命令の実装状況など）
+├── docs/             # 補助ドキュメント（命令状況・テスト・実機チェックリスト等）
 ├── src/              # BASIC エンジン（lexer / parser / repl）と HAL（hal_*.cpp）
 ├── tests/            # ホスト単体テスト（Google Test、BUILD_TESTS=ON）
 ├── specification.md  # 開発仕様書
