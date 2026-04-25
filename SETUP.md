@@ -39,6 +39,8 @@ git clone https://github.com/Toshiaki0315/pico-basic.git
 cd pico-basic
 ```
 
+> **リポジトリ URL について:** GitHub 上のリポジトリ名が `pico-basic` でない場合（例: `pico-hubasic` のままの場合）は、上記 `git clone` の URL を実際のリポジトリに合わせてください。クローン後のフォルダ名が `pico-basic` でなくても、以降の手順ではそのフォルダを開けば問題ありません。
+
 ### 3.2 VS Codeでの読み込みと初期設定
 1. VS Codeのメニューから `ファイル (File)` > `フォルダを開く (Open Folder)` を選び、先ほどクローンした `pico-basic` フォルダを開きます。
 2. フォルダを開くと、左側のメニューに「Raspberry Piのロゴ」のアイコンが追加されています。これをクリックします。
