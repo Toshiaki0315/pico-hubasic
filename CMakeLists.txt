@@ -1,31 +1,55 @@
+# == DO NOT EDIT THE FOLLOWING LINES for the Raspberry Pi Pico VS Code Extension to work ==
+if(WIN32)
+    set(USERHOME $ENV{USERPROFILE})
+else()
+    set(USERHOME $ENV{HOME})
+endif()
+set(sdkVersion 2.2.0)
+set(toolchainVersion 14_2_Rel1)
+set(picotoolVersion 2.2.0-a4)
+set(picoVscode ${USERHOME}/.pico-sdk/cmake/pico-vscode.cmake)
+if (EXISTS ${picoVscode})
+    include(${picoVscode})
+endif()
+# ====================================================================================
+
 cmake_minimum_required(VERSION 3.14)
 if(POLICY CMP0135)
     cmake_policy(SET CMP0135 NEW)
 endif()
 
+# 【追加修正1】強制的に Pico のコンパイラを指定（Macコンパイラの誤検知を防ぐ）
+set(CMAKE_C_COMPILER arm-none-eabi-gcc)
+set(CMAKE_CXX_COMPILER arm-none-eabi-g++)
+set(CMAKE_ASM_COMPILER arm-none-eabi-gcc)
+
+option(BUILD_TESTS "Build host unit tests instead of Pico UF2" OFF)
+
+if(NOT BUILD_TESTS)
+    set(PICO_BOARD pico2 CACHE STRING "Board type")
+    include(pico_sdk_import.cmake OPTIONAL)
+endif()
+
 project(pico_basic C CXX ASM)
 
-# C++20 (specification / agent docs と統一)
+# C++20
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Option to switch between embedded Pico build and Host unit test build
-option(BUILD_TESTS "Build host unit tests instead of Pico UF2" OFF)
+# 【追加修正2】Pico SDK で C++ の例外処理 (try/catch/throw) を有効にする
+set(PICO_CXX_ENABLE_EXCEPTIONS 1)
 
 if(BUILD_TESTS)
     message(STATUS "🚀 Building for HOST tests (Google Test will be downloaded)")
     
-    # 1. Fetch Google Test
     include(FetchContent)
     FetchContent_Declare(
       googletest
       URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
     )
-    # Prevent overriding the parent project's compiler/linker settings on Windows
     set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(googletest)
 
-    # 2. Build the core components without Pico's stdio or HAL dependencies
     add_library(core_lib
         src/lexer.cpp
         src/parser.cpp
@@ -34,7 +58,6 @@ if(BUILD_TESTS)
     )
     target_include_directories(core_lib PUBLIC src)
 
-    # 3. Create the basic_tests executable linking against GTest
     add_executable(basic_tests
         tests/test_lexer.cpp
         tests/test_parser.cpp
@@ -62,11 +85,6 @@ if(BUILD_TESTS)
 else()
     message(STATUS "🍓 Building for Pico RP2350 target")
     
-    # Define the target board before SDK initialization (RP2350 default is pico2)
-    set(PICO_BOARD pico2 CACHE STRING "Board type")
-
-    include(pico_sdk_import.cmake OPTIONAL)
-
     if (COMMAND pico_sdk_init)
         pico_sdk_init()
     else()
@@ -93,11 +111,9 @@ else()
             hardware_pwm
         )
         
-        # Use USB for standard I/O (Terminal connection)
         pico_enable_stdio_usb(pico_basic 1)
-        pico_enable_stdio_uart(pico_basic 0)
+        pico_enable_stdio_uart(pico_basic 1)
         
-        # Generate UF2 for RP2350
         pico_add_extra_outputs(pico_basic)
     endif()
 endif()

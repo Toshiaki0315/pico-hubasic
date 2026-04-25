@@ -1,13 +1,13 @@
 #include "hal_display.h"
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
 #include "hal_font.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #if __has_include("pico/stdlib.h")
-#include "pico/stdlib.h"
-#include "hardware/spi.h"
 #include "hardware/pwm.h"
+#include "hardware/spi.h"
+#include "pico/stdlib.h"
 
 // Waveshare RP2350-Touch-LCD-2.8 Pinout
 #define LCD_DC 16
@@ -34,199 +34,282 @@ static int cursor_y = 0;
 extern uint16_t current_color_565;
 
 static void lcd_write_cmd(uint8_t cmd) {
-    gpio_put(LCD_DC, 0);
-    gpio_put(LCD_CS, 0);
-    spi_write_blocking(SPI_PORT, &cmd, 1);
-    gpio_put(LCD_CS, 1);
+  gpio_put(LCD_DC, 0);
+  gpio_put(LCD_CS, 0);
+  spi_write_blocking(SPI_PORT, &cmd, 1);
+  gpio_put(LCD_CS, 1);
 }
 
 static void lcd_write_data(uint8_t data) {
-    gpio_put(LCD_DC, 1);
-    gpio_put(LCD_CS, 0);
-    spi_write_blocking(SPI_PORT, &data, 1);
-    gpio_put(LCD_CS, 1);
+  gpio_put(LCD_DC, 1);
+  gpio_put(LCD_CS, 0);
+  spi_write_blocking(SPI_PORT, &data, 1);
+  gpio_put(LCD_CS, 1);
 }
 
 static void lcd_set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
-    lcd_write_cmd(0x2A); // Column Address Set
-    lcd_write_data(x0 >> 8);
-    lcd_write_data(x0 & 0xFF);
-    lcd_write_data(x1 >> 8);
-    lcd_write_data(x1 & 0xFF);
+  lcd_write_cmd(0x2A); // Column Address Set
+  lcd_write_data(x0 >> 8);
+  lcd_write_data(x0 & 0xFF);
+  lcd_write_data(x1 >> 8);
+  lcd_write_data(x1 & 0xFF);
 
-    lcd_write_cmd(0x2B); // Row Address Set
-    lcd_write_data(y0 >> 8);
-    lcd_write_data(y0 & 0xFF);
-    lcd_write_data(y1 >> 8);
-    lcd_write_data(y1 & 0xFF);
+  lcd_write_cmd(0x2B); // Row Address Set
+  lcd_write_data(y0 >> 8);
+  lcd_write_data(y0 & 0xFF);
+  lcd_write_data(y1 >> 8);
+  lcd_write_data(y1 & 0xFF);
 
-    lcd_write_cmd(0x2C); // Memory Write
+  lcd_write_cmd(0x2C); // Memory Write
 }
 
 void hal_display_init() {
-    // SPI Init (125MHz / 2 = 62.5MHz)
-    spi_init(SPI_PORT, 60 * 1000 * 1000);
-    gpio_set_function(LCD_CLK, GPIO_FUNC_SPI);
-    gpio_set_function(LCD_DIN, GPIO_FUNC_SPI);
+  // SPI Init (125MHz / 2 = 62.5MHz)
+  spi_init(SPI_PORT, 60 * 1000 * 1000);
+  gpio_set_function(LCD_CLK, GPIO_FUNC_SPI);
+  gpio_set_function(LCD_DIN, GPIO_FUNC_SPI);
 
-    // GPIO Init
-    gpio_init(LCD_DC); gpio_set_dir(LCD_DC, GPIO_OUT);
-    gpio_init(LCD_CS); gpio_set_dir(LCD_CS, GPIO_OUT);
-    gpio_init(LCD_RST); gpio_set_dir(LCD_RST, GPIO_OUT);
-    
-    // Backlight PWM
-    gpio_set_function(LCD_BL, GPIO_FUNC_PWM);
-    uint slice_num = pwm_gpio_to_slice_num(LCD_BL);
-    pwm_set_wrap(slice_num, 100);
-    pwm_set_enabled(slice_num, true);
-    hal_display_set_brightness(80); // Default brightness
+  // GPIO Init
+  gpio_init(LCD_DC);
+  gpio_set_dir(LCD_DC, GPIO_OUT);
+  gpio_init(LCD_CS);
+  gpio_set_dir(LCD_CS, GPIO_OUT);
+  gpio_init(LCD_RST);
+  gpio_set_dir(LCD_RST, GPIO_OUT);
 
-    // Reset LCD
-    gpio_put(LCD_RST, 1); sleep_ms(1);
-    gpio_put(LCD_RST, 0); sleep_ms(10);
-    gpio_put(LCD_RST, 1); sleep_ms(10);
+  // Backlight PWM
+  gpio_set_function(LCD_BL, GPIO_FUNC_PWM);
+  uint slice_num = pwm_gpio_to_slice_num(LCD_BL);
+  pwm_set_wrap(slice_num, 100);
+  pwm_set_enabled(slice_num, true);
+  hal_display_set_brightness(80); // Default brightness
 
-    // ST7789 Init Sequence
-    lcd_write_cmd(0x01); // SW Reset
-    sleep_ms(150);
-    lcd_write_cmd(0x11); // Sleep Out
-    sleep_ms(10);
-    lcd_write_cmd(0x3A); lcd_write_data(0x05); // 16-bit color
-    lcd_write_cmd(0x36); lcd_write_data(0x70); // MADCTL: Landscape (X-Y exchange, Y-mirror for this board)
-    lcd_write_cmd(0x21); // Display Inversion On (common for IPS)
-    lcd_write_cmd(0x13); // Normal Display Mode On
-    lcd_write_cmd(0x29); // Display On
+  // Reset LCD
+  gpio_put(LCD_RST, 1);
+  sleep_ms(1);
+  gpio_put(LCD_RST, 0);
+  sleep_ms(10);
+  gpio_put(LCD_RST, 1);
+  sleep_ms(10);
 
-    hal_display_cls();
+  // ST7789 Init Sequence
+  lcd_write_cmd(0x01); // SW Reset
+  sleep_ms(150);
+  lcd_write_cmd(0x11); // Sleep Out
+  sleep_ms(10);
+  lcd_write_cmd(0x3A);
+  lcd_write_data(0x05); // 16-bit color
+  lcd_write_cmd(0x36);
+  lcd_write_data(
+      0x70); // MADCTL: Landscape (X-Y exchange, Y-mirror for this board)
+  lcd_write_cmd(0x21); // Display Inversion On (common for IPS)
+  lcd_write_cmd(0x13); // Normal Display Mode On
+  lcd_write_cmd(0x29); // Display On
+
+  // Startup Splash Screen
+  memset(frame_buffer, 0, sizeof(frame_buffer));
+  int cx = LCD_WIDTH / 2;
+  int cy = LCD_HEIGHT / 2;
+  for (int r = 10; r <= 80; r += 10) {
+    hal_graphics_circle(cx, cy, r, 0x07E0); // Green circles
+  }
+  cursor_x = 9;
+  cursor_y = 12;
+  uint16_t old_color = current_color_565;
+  current_color_565 = 0xFFFF; // White text
+  hal_display_print("pico-basic Booting...");
+  current_color_565 = old_color;
+  
+  hal_display_sync();
+  sleep_ms(1000);
+
+  hal_display_cls();
 }
 
 void hal_display_set_brightness(int level) {
-    if (level < 0) level = 0;
-    if (level > 100) level = 100;
-    pwm_set_gpio_level(LCD_BL, level);
+  if (level < 0)
+    level = 0;
+  if (level > 100)
+    level = 100;
+  pwm_set_gpio_level(LCD_BL, level);
 }
 
 void hal_graphics_pset(int x, int y, uint16_t color) {
-    if (x < 0 || x >= LCD_WIDTH || y < 0 || y >= LCD_HEIGHT) return;
-    frame_buffer[y * LCD_WIDTH + x] = color;
+  if (x < 0 || x >= LCD_WIDTH || y < 0 || y >= LCD_HEIGHT)
+    return;
+  frame_buffer[y * LCD_WIDTH + x] = color;
 }
 
 uint16_t hal_graphics_get_pixel(int x, int y) {
-    if (x < 0 || x >= LCD_WIDTH || y < 0 || y >= LCD_HEIGHT) return 0;
-    return frame_buffer[y * LCD_WIDTH + x];
+  if (x < 0 || x >= LCD_WIDTH || y < 0 || y >= LCD_HEIGHT)
+    return 0;
+  return frame_buffer[y * LCD_WIDTH + x];
 }
 
 void hal_display_sync() {
-    lcd_set_window(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1);
-    gpio_put(LCD_DC, 1);
-    gpio_put(LCD_CS, 0);
-    // Push the whole frame buffer via SPI
-    spi_write_blocking(SPI_PORT, (uint8_t*)frame_buffer, LCD_WIDTH * LCD_HEIGHT * 2);
-    gpio_put(LCD_CS, 1);
+  lcd_set_window(0, 0, LCD_WIDTH - 1, LCD_HEIGHT - 1);
+  gpio_put(LCD_DC, 1);
+  gpio_put(LCD_CS, 0);
+  // Push the whole frame buffer via SPI
+  spi_write_blocking(SPI_PORT, (uint8_t *)frame_buffer,
+                     LCD_WIDTH * LCD_HEIGHT * 2);
+  gpio_put(LCD_CS, 1);
 }
 
 void hal_graphics_line(int x1, int y1, int x2, int y2, uint16_t color) {
-    // Bresenham's algorithm
-    int dx = abs(x2 - x1), sx = x1 < x2 ? 1 : -1;
-    int dy = -abs(y2 - y1), sy = y1 < y2 ? 1 : -1;
-    int err = dx + dy, e2;
-    while (true) {
-        hal_graphics_pset(x1, y1, color);
-        if (x1 == x2 && y1 == y2) break;
-        e2 = 2 * err;
-        if (e2 >= dy) { err += dy; x1 += sx; }
-        if (e2 <= dx) { err += dx; y1 += sy; }
+  // Bresenham's algorithm
+  int dx = abs(x2 - x1), sx = x1 < x2 ? 1 : -1;
+  int dy = -abs(y2 - y1), sy = y1 < y2 ? 1 : -1;
+  int err = dx + dy, e2;
+  while (true) {
+    hal_graphics_pset(x1, y1, color);
+    if (x1 == x2 && y1 == y2)
+      break;
+    e2 = 2 * err;
+    if (e2 >= dy) {
+      err += dy;
+      x1 += sx;
     }
+    if (e2 <= dx) {
+      err += dx;
+      y1 += sy;
+    }
+  }
 }
 
 void hal_graphics_circle(int x0, int y0, int radius, uint16_t color) {
-    int x = radius, y = 0;
-    int err = 0;
-    while (x >= y) {
-        hal_graphics_pset(x0 + x, y0 + y, color);
-        hal_graphics_pset(x0 + y, y0 + x, color);
-        hal_graphics_pset(x0 - y, y0 + x, color);
-        hal_graphics_pset(x0 - x, y0 + y, color);
-        hal_graphics_pset(x0 - x, y0 - y, color);
-        hal_graphics_pset(x0 - y, y0 - x, color);
-        hal_graphics_pset(x0 + y, y0 - x, color);
-        hal_graphics_pset(x0 + x, y0 - y, color);
-        if (err <= 0) {
-            y += 1;
-            err += 2 * y + 1;
-        }
-        if (err > 0) {
-            x -= 1;
-            err -= 2 * x + 1;
-        }
+  int x = radius, y = 0;
+  int err = 0;
+  while (x >= y) {
+    hal_graphics_pset(x0 + x, y0 + y, color);
+    hal_graphics_pset(x0 + y, y0 + x, color);
+    hal_graphics_pset(x0 - y, y0 + x, color);
+    hal_graphics_pset(x0 - x, y0 + y, color);
+    hal_graphics_pset(x0 - x, y0 - y, color);
+    hal_graphics_pset(x0 - y, y0 - x, color);
+    hal_graphics_pset(x0 + y, y0 - x, color);
+    hal_graphics_pset(x0 + x, y0 - y, color);
+    if (err <= 0) {
+      y += 1;
+      err += 2 * y + 1;
     }
+    if (err > 0) {
+      x -= 1;
+      err -= 2 * x + 1;
+    }
+  }
 }
 
 static void char_at(int x, int y, char c, uint16_t fg, uint16_t bg) {
-    if (c < 0 || c > 127) c = ' ';
-    for (int j = 0; j < 8; j++) {
-        uint8_t row = BASIC_FONT[(int)c][j];
-        for (int i = 0; i < 8; i++) {
-            uint16_t color = (row & (0x80 >> i)) ? fg : bg;
-            hal_graphics_pset(x + i, y + j, color);
-        }
+  if (c < 0 || c > 127)
+    c = ' ';
+  for (int j = 0; j < 8; j++) {
+    uint8_t row = BASIC_FONT[(int)c][j];
+    for (int i = 0; i < 8; i++) {
+      uint16_t color = (row & (0x80 >> i)) ? fg : bg;
+      hal_graphics_pset(x + i, y + j, color);
     }
+  }
 }
 
 static void scroll_up() {
-    memmove(frame_buffer, frame_buffer + (FONT_HEIGHT * LCD_WIDTH), 
-            (LCD_HEIGHT - FONT_HEIGHT) * LCD_WIDTH * 2);
-    memset(frame_buffer + (LCD_HEIGHT - FONT_HEIGHT) * LCD_WIDTH, 0, 
-           FONT_HEIGHT * LCD_WIDTH * 2);
+  memmove(frame_buffer, frame_buffer + (FONT_HEIGHT * LCD_WIDTH),
+          (LCD_HEIGHT - FONT_HEIGHT) * LCD_WIDTH * 2);
+  memset(frame_buffer + (LCD_HEIGHT - FONT_HEIGHT) * LCD_WIDTH, 0,
+         FONT_HEIGHT * LCD_WIDTH * 2);
 }
 
-void hal_display_print(const char* text) {
-    while (*text) {
-        char c = *text++;
-        if (c == '\n') {
-            cursor_x = 0;
-            cursor_y++;
-        } else if (c == '\r') {
-            cursor_x = 0;
-        } else if (c == '\t') {
-            cursor_x = (cursor_x / 8 + 1) * 8;
-        } else if (c == '\b') {
-            if (cursor_x > 0) {
-                cursor_x--;
-            } else if (cursor_y > 0) {
-                cursor_y--;
-                cursor_x = TEXT_COLS - 1;
-            }
-        } else {
-            char_at(cursor_x * FONT_WIDTH, cursor_y * FONT_HEIGHT, c, current_color_565, 0x0000);
-            cursor_x++;
-        }
-
-        if (cursor_x >= TEXT_COLS) {
-            cursor_x = 0;
-            cursor_y++;
-        }
-        if (cursor_y >= TEXT_ROWS) {
-            scroll_up();
-            cursor_y = TEXT_ROWS - 1;
-        }
+void hal_display_print(const char *text) {
+  while (*text) {
+    char c = *text++;
+    if (c == '\n') {
+      cursor_x = 0;
+      cursor_y++;
+    } else if (c == '\r') {
+      cursor_x = 0;
+    } else if (c == '\t') {
+      cursor_x = (cursor_x / 8 + 1) * 8;
+    } else if (c == '\b') {
+      if (cursor_x > 0) {
+        cursor_x--;
+      } else if (cursor_y > 0) {
+        cursor_y--;
+        cursor_x = TEXT_COLS - 1;
+      }
+    } else {
+      char_at(cursor_x * FONT_WIDTH, cursor_y * FONT_HEIGHT, c,
+              current_color_565, 0x0000);
+      cursor_x++;
     }
+
+    if (cursor_x >= TEXT_COLS) {
+      cursor_x = 0;
+      cursor_y++;
+    }
+    if (cursor_y >= TEXT_ROWS) {
+      scroll_up();
+      cursor_y = TEXT_ROWS - 1;
+    }
+  }
+  hal_display_sync();
 }
 
 void hal_display_cls() {
-    memset(frame_buffer, 0, sizeof(frame_buffer));
-    cursor_x = 0;
-    cursor_y = 0;
+  memset(frame_buffer, 0, sizeof(frame_buffer));
+  cursor_x = 0;
+  cursor_y = 0;
+  hal_display_sync();
 }
 
 void hal_display_locate(int x, int y) {
-    if (x >= 0 && x < TEXT_COLS) cursor_x = x;
-    if (y >= 0 && y < TEXT_ROWS) cursor_y = y;
+  if (x >= 0 && x < TEXT_COLS)
+    cursor_x = x;
+  if (y >= 0 && y < TEXT_ROWS)
+    cursor_y = y;
 }
 
-void hal_display_get_info(int& width, int& height) {
-    width = LCD_WIDTH;
-    height = LCD_HEIGHT;
+void hal_display_get_info(int &width, int &height) {
+  width = LCD_WIDTH;
+  height = LCD_HEIGHT;
+}
+
+void hal_display_input(char *buffer, int max_len) {
+  int input_ptr = 0;
+  memset(buffer, 0, max_len);
+
+  while (true) {
+    int c = getchar();
+
+    if (c == EOF)
+      continue;
+
+    if (c == '\r' || c == '\n') {
+      printf("\n");
+      hal_display_print("\n");
+      break;
+    } else if (c == '\b' || c == 127) {
+      if (input_ptr > 0) {
+        input_ptr--;
+        buffer[input_ptr] = '\0';
+        printf("\b \b");
+        hal_display_print("\b \b");
+      }
+    } else if (c >= 32 && c <= 126) {
+      if (input_ptr < max_len - 1) {
+        buffer[input_ptr++] = static_cast<char>(c);
+        buffer[input_ptr] = '\0';
+        putchar(c);
+
+        char s[2] = {static_cast<char>(c), '\0'};
+        hal_display_print(s);
+      }
+    }
+  }
+}
+
+void hal_system_wait(int ms) {
+  if (ms > 0)
+    sleep_ms(ms);
 }
 #else
 // ---------------------------------------------------------
@@ -235,31 +318,31 @@ void hal_display_get_info(int& width, int& height) {
 
 void hal_display_init() {}
 
-void hal_display_print(const char* text) {
-    // Implementation is in mock_hal_display.cpp
+void hal_display_print(const char *text) {
+  // Implementation is in mock_hal_display.cpp
 }
 
 void hal_display_cls() {
-    // Implementation is in mock_hal_display.cpp
+  // Implementation is in mock_hal_display.cpp
 }
 
 void hal_display_locate(int x, int y) {}
 
 void hal_graphics_pset(int x, int y, uint16_t color) {
-    // Implementation is in mock_hal_display.cpp
+  // Implementation is in mock_hal_display.cpp
 }
 
 void hal_graphics_line(int x1, int y1, int x2, int y2, uint16_t color) {
-    // Implementation is in mock_hal_display.cpp
+  // Implementation is in mock_hal_display.cpp
 }
 
 void hal_graphics_circle(int x, int y, int r, uint16_t color) {
-    // Implementation is in mock_hal_display.cpp
+  // Implementation is in mock_hal_display.cpp
 }
 
-void hal_display_get_info(int& width, int& height) {
-    width = 320;
-    height = 240;
+void hal_display_get_info(int &width, int &height) {
+  width = 320;
+  height = 240;
 }
 
 void hal_display_set_brightness(int level) {}
