@@ -1,13 +1,13 @@
 #include "hal_display.h"
-#include "hal_font.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 #if __has_include("pico/stdlib.h")
+#include "hal_font.h"
 #include "hardware/pwm.h"
 #include "hardware/spi.h"
 #include "pico/stdlib.h"
+#include <string.h>
 
 // Waveshare RP2350-Touch-LCD-2.8 Pinout
 #define LCD_DC 16
