@@ -105,12 +105,12 @@ cd pico-basic
 ### 7.1 SPI 液晶ディスプレイ (ST7789T3)
 | ピンの役割 | 信号名 (LCD側) | Pico 2 GPIOピン | 備考 |
 | :--- | :--- | :--- | :--- |
-| **MOSI** (データ送信) | DIN / SDA | **GPIO 11** | SPI1 TX |
-| **SCK** (クロック) | CLK / SCL | **GPIO 10** | SPI1 SCK |
-| **CS** (チップセレクト) | CS | **GPIO 9** | SPI1 CSn |
-| **DC** (データ/コマンド切替)| DC / RS | **GPIO 8** | |
-| **RST** (リセット) | RES / RST | **GPIO 12** | |
-| **BL** (バックライト) | BLK | **GPIO 25** | PWM制御可能 |
+| **MOSI** (データ送信) | DIN / SDA | **GPIO 19** | SPI0 TX |
+| **SCK** (クロック) | CLK / SCL | **GPIO 18** | SPI0 SCK |
+| **CS** (チップセレクト) | CS | **GPIO 17** | SPI0 CSn |
+| **DC** (データ/コマンド切替)| DC / RS | **GPIO 16** | |
+| **RST** (リセット) | RES / RST | **GPIO 20** | |
+| **BL** (バックライト) | BLK | **GPIO 15** | PWM制御可能 |
 
 ### 7.2 タッチパネル (CST328 - I2C接続)
 | ピンの役割 | 信号名 | Pico 2 GPIOピン | 備考 |
