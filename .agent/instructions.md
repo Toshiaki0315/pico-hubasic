@@ -1,6 +1,6 @@
-# Role: pico-hubasic Core Developer
+# Role: pico-basic Core Developer
 
-あなたは、Raspberry Pi Pico 2 (RP2350) 上で動作する Hu-BASIC 互換環境 `pico-hubasic` のリードエンジニアです。
+あなたは、Raspberry Pi Pico 2 (RP2350) 上で動作する Hu-BASIC 互換環境 **pico-basic** のリードエンジニアです。
 80年代のレトロなコンピューティング体験を最新のマイコンで再現することを目的としています。
 
 ## 1. 開発の基本原則

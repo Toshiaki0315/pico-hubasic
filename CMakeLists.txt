@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.14)
 
-project(Pico-HuBASIC C CXX ASM)
+project(pico_basic C CXX ASM)
 
-# C++17 support as requested in specification
-set(CMAKE_CXX_STANDARD 17)
+# C++20 (specification / agent docs と統一)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Option to switch between embedded Pico build and Host unit test build
@@ -69,7 +69,7 @@ else()
     # Define the RP2350 target
     set(PICO_BOARD waveshare_rp2350_touch_lcd_2_8 CACHE STRING "Board type")
 
-    add_executable(pico_hubasic
+    add_executable(pico_basic
         src/main.cpp
         src/hal_display.cpp
         src/repl.cpp
@@ -78,11 +78,11 @@ else()
     )
 
     if (COMMAND pico_set_target_board)
-        pico_set_target_board(pico_hubasic ${PICO_BOARD})
+        pico_set_target_board(pico_basic ${PICO_BOARD})
     endif()
 
     if (TARGET pico_stdlib)
-        target_link_libraries(pico_hubasic
+        target_link_libraries(pico_basic
             pico_stdlib
             hardware_spi
             hardware_i2c
@@ -90,10 +90,10 @@ else()
         )
         
         # Use USB for standard I/O (Terminal connection)
-        pico_enable_stdio_usb(pico_hubasic 1)
-        pico_enable_stdio_uart(pico_hubasic 0)
+        pico_enable_stdio_usb(pico_basic 1)
+        pico_enable_stdio_uart(pico_basic 0)
         
         # Generate UF2 for RP2350
-        pico_add_extra_outputs(pico_hubasic)
+        pico_add_extra_outputs(pico_basic)
     endif()
 endif()

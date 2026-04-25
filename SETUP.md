@@ -1,6 +1,6 @@
-# pico-hubasic 開発環境構築ガイド (macOS)
+# pico-basic 開発環境構築ガイド (macOS)
 
-このドキュメントでは、macOS（Apple Silicon / M1〜M4）上で `pico-hubasic` を実機（Raspberry Pi Pico 2 / RP2350）向けにビルドし、書き込むための手順を解説します。
+このドキュメントでは、macOS（Apple Silicon / M1〜M4）上で **pico-basic** を実機（Raspberry Pi Pico 2 / RP2350）向けにビルドし、書き込むための手順を解説します。
 
 複雑なツールチェーンの個別インストールは不要です。Visual Studio Codeの公式拡張機能を利用して、簡単に環境を構築できます。
 
@@ -35,12 +35,12 @@
 Macの「ターミナル」を開き、任意のディレクトリで以下のコマンドを実行してプロジェクトをダウンロードします。
 
 ```bash
-git clone [https://github.com/Toshiaki0315/pico-hubasic.git](https://github.com/Toshiaki0315/pico-hubasic.git)
-cd pico-hubasic
+git clone https://github.com/Toshiaki0315/pico-basic.git
+cd pico-basic
 ```
 
 ### 3.2 VS Codeでの読み込みと初期設定
-1. VS Codeのメニューから `ファイル (File)` > `フォルダを開く (Open Folder)` を選び、先ほどクローンした `pico-hubasic` フォルダを開きます。
+1. VS Codeのメニューから `ファイル (File)` > `フォルダを開く (Open Folder)` を選び、先ほどクローンした `pico-basic` フォルダを開きます。
 2. フォルダを開くと、左側のメニューに「Raspberry Piのロゴ」のアイコンが追加されています。これをクリックします。
 3. 初回のみ、拡張機能がPico SDKやツールチェーンの自動ダウンロードを行います。画面の指示に従って完了するまでお待ちください。
 
@@ -53,7 +53,7 @@ cd pico-hubasic
 1. VS Codeの下部（ステータスバー）にある **「Compile Project」** をクリックします。
    * ※もしターゲットボードを聞かれた場合は `pico2` または `rp2350` を選択してください。
 2. コンパイルが始まります。エラーが出なければ成功です。
-3. 成功すると、プロジェクトフォルダ内に `build` というフォルダが作成され、その中に `pico-hubasic.uf2` というファイルが生成されます。
+3. 成功すると、プロジェクトフォルダ内に `build` というフォルダが作成され、その中に `pico_basic.uf2` というファイルが生成されます。
 
 ---
 
@@ -64,7 +64,7 @@ cd pico-hubasic
 1. Pico 2本体にある **「BOOT」ボタン（または BOOTSEL ボタン）を押したまま**、MacにUSBケーブルで接続します。
 2. 接続したらボタンから指を離します。
 3. Macのデスクトップ（またはFinder）に `RPI-RP2` という名前のUSBメモリのようなドライブが表示されます。
-4. 先ほどコンパイルして作成された `build/pico-hubasic.uf2` ファイルを、この `RPI-RP2` ドライブへ **ドラッグ＆ドロップ** してコピーします。
+4. 先ほどコンパイルして作成された `build/pico_basic.uf2` ファイルを、この `RPI-RP2` ドライブへ **ドラッグ＆ドロップ** してコピーします。
 5. コピーが完了すると、ドライブは自動的に取り外され、Pico 2上でプログラムが自動的に実行（再起動）されます。
 
 ---

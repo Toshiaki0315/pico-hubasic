@@ -12,7 +12,7 @@ void repl_start() {
     int input_ptr = 0;
     
     // Output initial startup banner
-    const char* banner = "Pico-HuBASIC v2.0\n";
+    const char* banner = "pico-basic v2.0\n";
     printf("%s", banner);
     hal_display_print(banner);
 

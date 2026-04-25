@@ -1,8 +1,8 @@
-# Pico-HuBASIC 開発仕様書 (v2.0 - Waveshare RP2350-Touch-LCD-2.8対応版)
+# pico-basic 開発仕様書 (v2.0 - Waveshare RP2350-Touch-LCD-2.8対応版)
 
 ## 1. プロジェクト概要
-本プロジェクトは、Raspberry Pi Pico 2（RP2350）を搭載した「Waveshare RP2350-Touch-LCD-2.8」ボード上で動作する、1980年代のHu-BASICと高い文法互換性を持つBASICインタプリタ「Pico-HuBASIC」を開発する。
-開発言語はC++（C++17以上）とし、Raspberry Pi Pico SDK (v2.0.0以上) を使用する。
+本プロジェクトは、Raspberry Pi Pico 2（RP2350）を搭載した「Waveshare RP2350-Touch-LCD-2.8」ボード上で動作する、1980年代のHu-BASICと高い文法互換性を持つBASICインタプリタ **pico-basic** を開発する。
+開発言語はC++20とし、Raspberry Pi Pico SDK (v2.0.0以上) を使用する。
 
 ## 2. 外部仕様書（ユーザーインターフェース・言語仕様）
 

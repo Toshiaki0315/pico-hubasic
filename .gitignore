@@ -47,3 +47,6 @@ cmake_tmp/
 # AI Agent local settings
 .agent/local_context.md
 
+# Local task tracking
+TASK.md
+

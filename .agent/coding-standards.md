@@ -1,4 +1,4 @@
-# Coding Standards: pico-hubasic
+# Coding Standards: pico-basic
 
 このプロジェクトでは、保守性が高く、バグの混入しにくい高品質な組み込みコードを目指します。
 

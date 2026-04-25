@@ -1,4 +1,4 @@
-# Technology Stack: pico-hubasic
+# Technology Stack: pico-basic
 
 このプロジェクトで使用されている技術スタックと、開発環境の制約事項です。
 
@@ -32,7 +32,7 @@
 エージェントが実行可能な（または提案すべき）コマンド：
 - **ビルド**: `mkdir -p build && cd build && cmake .. && make`
 - **テスト実行**: `cd build/tests && ctest`
-- **フラッシュ**: `picotool load -x build/pico_hubasic.uf2`
+- **フラッシュ**: `picotool load -x build/pico_basic.uf2`
 
 ## 6. Constraints & Guidelines
 - **Heap Usage**: 原則禁止。起動時に静的にメモリを確保するスタイルを推奨。

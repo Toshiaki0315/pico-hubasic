@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 
-// PICO_HUBASIC_HAL_DISPLAY_H
+// pico-basic HAL display
 // Hardware Abstraction Layer for Display targeting Waveshare RP2350-Touch-LCD-2.8
 
 // Phase 2: SPI Display Driver Implementation

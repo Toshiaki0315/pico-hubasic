@@ -1539,7 +1539,7 @@ static void execute_get_at(const TokenList& tokens, int& pos) {
     int x2 = static_cast<int>(vx2.num_val), y2 = static_cast<int>(vy2.num_val);
     int w = abs(x2 - x1) + 1, h = abs(y2 - y1) + 1;
     
-    if (2 + w * h > arr->size) throw std::runtime_error("Array too small for image");
+    if (2 + w * h > arr->total_size()) throw std::runtime_error("Array too small for image");
     
     write_heap_value(arr->start_addr, Value((float)w));
     write_heap_value(arr->start_addr + 8, Value((float)h));
