@@ -63,69 +63,86 @@ static void lcd_set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
   lcd_write_cmd(0x2C); // Memory Write
 }
 
+void hal_display_cls() {
+  memset(frame_buffer, 0, sizeof(frame_buffer)); // 黒でクリア
+  cursor_x = 0;
+  cursor_y = 0;
+  hal_display_sync();
+}
+
 void hal_display_init() {
-  // SPI Init (125MHz / 2 = 62.5MHz)
-  spi_init(SPI_PORT, 60 * 1000 * 1000);
+  // 1. SPI通信の安定化 (安定確実な30MHzに落とし、フォーマットを明示)
+  spi_init(SPI_PORT, 30 * 1000 * 1000);
+  spi_set_format(SPI_PORT, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
+
   gpio_set_function(LCD_CLK, GPIO_FUNC_SPI);
   gpio_set_function(LCD_DIN, GPIO_FUNC_SPI);
 
-  // GPIO Init
+  // 2. GPIO初期化と「待機状態(1)」の固定
   gpio_init(LCD_DC);
   gpio_set_dir(LCD_DC, GPIO_OUT);
+  gpio_put(LCD_DC, 1);
+
   gpio_init(LCD_CS);
   gpio_set_dir(LCD_CS, GPIO_OUT);
+  gpio_put(LCD_CS, 1); // ★超重要: 初期状態は必ず1(非選択)
+
   gpio_init(LCD_RST);
   gpio_set_dir(LCD_RST, GPIO_OUT);
+  gpio_put(LCD_RST, 1);
 
-  // Backlight PWM
+  // バックライトPWM
   gpio_set_function(LCD_BL, GPIO_FUNC_PWM);
   uint slice_num = pwm_gpio_to_slice_num(LCD_BL);
   pwm_set_wrap(slice_num, 100);
   pwm_set_enabled(slice_num, true);
-  hal_display_set_brightness(80); // Default brightness
+  hal_display_set_brightness(80);
 
-  // Reset LCD
+  // ハードウェアリセット
   gpio_put(LCD_RST, 1);
-  sleep_ms(1);
+  sleep_ms(100);
   gpio_put(LCD_RST, 0);
-  sleep_ms(10);
+  sleep_ms(100);
   gpio_put(LCD_RST, 1);
-  sleep_ms(10);
+  sleep_ms(120);
 
-  // ST7789 Init Sequence
+  // 3. ST7789 初期化コマンド
   lcd_write_cmd(0x01); // SW Reset
   sleep_ms(150);
   lcd_write_cmd(0x11); // Sleep Out
-  sleep_ms(10);
+  sleep_ms(120);       // ★データシート指定の必須ウェイト
+
   lcd_write_cmd(0x3A);
   lcd_write_data(0x05); // 16-bit color
   lcd_write_cmd(0x36);
-  lcd_write_data(
-      0x70); // MADCTL: Landscape (X-Y exchange, Y-mirror for this board)
-  lcd_write_cmd(0x21); // Display Inversion On (common for IPS)
-  lcd_write_cmd(0x13); // Normal Display Mode On
-  lcd_write_cmd(0x29); // Display On
+  lcd_write_data(0x70); // Landscape
+  lcd_write_cmd(0x21);  // Display Inversion On
+  lcd_write_cmd(0x13);  // Normal Display Mode On
 
-  // Startup Splash Screen
-  memset(frame_buffer, 0, sizeof(frame_buffer));
+  lcd_write_cmd(0x29); // Display On
+  sleep_ms(100);
+
+  // === スプラッシュ画面 ===
+  hal_display_cls(); // 背景を青色にする
+
   int cx = LCD_WIDTH / 2;
   int cy = LCD_HEIGHT / 2;
   for (int r = 10; r <= 80; r += 10) {
-    hal_graphics_circle(cx, cy, r, 0x07E0); // Green circles
+    hal_graphics_circle(cx, cy, r, 0x07E0); // 緑の円
   }
+
   cursor_x = 9;
   cursor_y = 12;
-  uint16_t old_color = current_color_565;
-  current_color_565 = 0xFFFF; // White text
+  current_color_565 = 0xFFFF; // テキスト色を白に強制
   hal_display_print("pico-basic Booting...");
-  current_color_565 = old_color;
-  
-  hal_display_sync();
-  sleep_ms(1000);
 
+  hal_display_sync();
+
+  sleep_ms(2000); // スプラッシュ画面を2秒表示
+
+  // 5秒後に青色背景にクリアして REPL(Ready) 待機状態へ
   hal_display_cls();
 }
-
 void hal_display_set_brightness(int level) {
   if (level < 0)
     level = 0;
@@ -251,13 +268,6 @@ void hal_display_print(const char *text) {
       cursor_y = TEXT_ROWS - 1;
     }
   }
-  hal_display_sync();
-}
-
-void hal_display_cls() {
-  memset(frame_buffer, 0, sizeof(frame_buffer));
-  cursor_x = 0;
-  cursor_y = 0;
   hal_display_sync();
 }
 
