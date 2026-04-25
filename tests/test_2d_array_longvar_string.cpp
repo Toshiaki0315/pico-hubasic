@@ -149,10 +149,11 @@ TEST_F(AdvancedFeaturesNewTest, LongVarArithmetic) {
 }
 
 TEST_F(AdvancedFeaturesNewTest, LongVarInLoop) {
+    // ループ変数名に STEP は使わない（FOR 文の STEP 句と字句解析上の衝突を避ける）
     store_line(10, lex("TOTAL = 0"));
-    store_line(20, lex("FOR STEP = 1 TO 5"));
-    store_line(30, lex("TOTAL = TOTAL + STEP"));
-    store_line(40, lex("NEXT STEP"));
+    store_line(20, lex("FOR CNT = 1 TO 5"));
+    store_line(30, lex("TOTAL = TOTAL + CNT"));
+    store_line(40, lex("NEXT CNT"));
     store_line(50, lex("PRINT TOTAL"));
     parse_and_execute(lex("RUN"));
     EXPECT_EQ(mock_hal::get_raw_print_buffer(), "15\n");

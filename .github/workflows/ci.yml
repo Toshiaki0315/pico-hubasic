@@ -1,0 +1,30 @@
+# ホスト上の単体テスト（Pico SDK 不要）。UF2 生成は未対象。
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build build-essential
+
+      - name: Configure and build (BUILD_TESTS=ON)
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
+
+      - name: Build basic_tests
+        run: cmake --build build --parallel
+
+      - name: Run unit tests
+        working-directory: build
+        run: ./basic_tests

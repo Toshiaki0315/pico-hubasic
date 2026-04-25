@@ -75,8 +75,8 @@ TEST_F(LexerTest, VariableNameRules) {
     EXPECT_NO_THROW(lex("B$ = \"X\""));
     EXPECT_NO_THROW(lex("C1% = 3"));
 
-    // Expected Syntax Errors
-    EXPECT_THROW(lex("AA = 1"), std::runtime_error);
-    EXPECT_THROW(lex("A12 = 1"), std::runtime_error);
-    EXPECT_THROW(lex("LONGVAR = 1"), std::runtime_error);
+    // pico-basic は Hu-BASIC の最短名に加え、長い識別子も字句として受理する
+    EXPECT_NO_THROW(lex("AA = 1"));
+    EXPECT_NO_THROW(lex("A12 = 1"));
+    EXPECT_NO_THROW(lex("LONGVAR = 1"));
 }

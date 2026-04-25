@@ -1,6 +1,7 @@
 #include "hal_gpio.h"
 
-#ifdef PICO_BOARD
+/* Pico SDK ビルドでは pico/stdlib.h が存在する。ホストテストでは mock が GPIO を提供 */
+#if __has_include("pico/stdlib.h")
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 
@@ -26,5 +27,5 @@ bool hal_gpio_read(int pin) {
     return gpio_get(pin);
 }
 #else
-// Host-side mock implementation is handled in mock_hal_display.cpp
+// ホストでは tests/mock_hal_display.cpp が GPIO をスタブ実装
 #endif

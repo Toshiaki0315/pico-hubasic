@@ -72,6 +72,9 @@ else()
     add_executable(pico_basic
         src/main.cpp
         src/hal_display.cpp
+        src/hal_gpio.cpp
+        src/hal_sound.cpp
+        src/hal_touch.cpp
         src/repl.cpp
         src/lexer.cpp
         src/parser.cpp

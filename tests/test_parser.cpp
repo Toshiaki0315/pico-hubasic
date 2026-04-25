@@ -265,8 +265,8 @@ TEST_F(StringArrayTest, StringArrayUsage) {
 TEST_F(StringArrayTest, OutOfBoundsCheck) {
     parse_and_execute(lex("DIM B(3)"));
     mock_hal::reset();
-    parse_and_execute(lex("B(4) = 100")); 
-    EXPECT_TRUE(mock_hal::get_raw_print_buffer().find("Out of bounds") != std::string::npos);
+    parse_and_execute(lex("B(4) = 100"));
+    EXPECT_TRUE(mock_hal::get_raw_print_buffer().find("out of bounds") != std::string::npos);
 }
 
 TEST_F(StringArrayTest, TypeMismatchCheck) {
