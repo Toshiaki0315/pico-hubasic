@@ -42,7 +42,7 @@ void repl_start() {
                     input_ptr--;
                     input_buffer[input_ptr] = '\0';
                     printf("\b \b");
-                    // Assuming hal_display_print supports backspace, or we redraw the line
+                    hal_display_print("\b \b");
                 }
             } else if (c >= 32 && c <= 126) {
                 if (input_ptr < MAX_LINE_LEN - 1) {

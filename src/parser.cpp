@@ -98,7 +98,7 @@ static const uint16_t PALETTE[16] = {
     0xFFE0, // 14: Yellow
     0xFFFF  // 15: White
 };
-static uint16_t current_color_565 = PALETTE[15]; // Default white
+uint16_t current_color_565 = PALETTE[15]; // Default white
 
 // Token serialization helpers
 static int tokenize(const TokenList& tokens, uint8_t* buffer) {

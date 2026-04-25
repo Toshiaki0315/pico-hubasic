@@ -31,6 +31,8 @@ static uint16_t frame_buffer[LCD_WIDTH * LCD_HEIGHT];
 static int cursor_x = 0;
 static int cursor_y = 0;
 
+extern uint16_t current_color_565;
+
 static void lcd_write_cmd(uint8_t cmd) {
     gpio_put(LCD_DC, 0);
     gpio_put(LCD_CS, 0);
@@ -188,6 +190,13 @@ void hal_display_print(const char* text) {
             cursor_x = 0;
         } else if (c == '\t') {
             cursor_x = (cursor_x / 8 + 1) * 8;
+        } else if (c == '\b') {
+            if (cursor_x > 0) {
+                cursor_x--;
+            } else if (cursor_y > 0) {
+                cursor_y--;
+                cursor_x = TEXT_COLS - 1;
+            }
         } else {
             char_at(cursor_x * FONT_WIDTH, cursor_y * FONT_HEIGHT, c, current_color_565, 0x0000);
             cursor_x++;
