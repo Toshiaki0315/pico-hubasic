@@ -684,7 +684,14 @@ static Value parse_factor(const TokenList& tokens, int& pos) {
         return Value(-v.num_val);
     }
     if (t.type == TokenType::NUMBER) {
-        pos++; return Value((float)atof(t.text));
+        pos++;
+        float fv = (float)atof(t.text);
+        // 小数点なし、かつ整数範囲内なら INT 型として扱う
+        bool has_dot = false;
+        for (int i = 0; t.text[i]; i++) if (t.text[i] == '.') { has_dot = true; break; }
+        if (!has_dot && fv >= -2147483648.0f && fv <= 2147483647.0f)
+            return Value((int)(int)fv);
+        return Value(fv);
     }
     if (t.type == TokenType::STRING) {
         pos++; return Value((const char*)t.text);
@@ -1962,8 +1969,9 @@ static void execute_statement(const TokenList& tokens, int& pos) {
 // ---------------------------------------------------------
 // Public API
 // ---------------------------------------------------------
-void parse_and_execute(const TokenList& tokens) {
-    if (tokens.size == 0 || tokens.tokens[0].type == TokenType::END_OF_FILE) return;
+// Returns true if a program line was stored (suppresses Ready prompt).
+bool parse_and_execute(const TokenList& tokens) {
+    if (tokens.size == 0 || tokens.tokens[0].type == TokenType::END_OF_FILE) return false;
     
     try {
         if (tokens.tokens[0].type == TokenType::NUMBER) {
@@ -1973,25 +1981,25 @@ void parse_and_execute(const TokenList& tokens) {
             for (int i = 1; i < tokens.size; i++) remainder.tokens[j++] = tokens.tokens[i];
             remainder.size = j;
             store_line(line_num, remainder);
-            return;
+            return true; // 行番号入力時はプロンプトを出さない
         } else if (tokens.tokens[0].type == TokenType::NEW) {
             clear_program();
-            return;
+            return false;
         } else if (tokens.tokens[0].type == TokenType::LIST) {
             list_program();
-            return;
+            return false;
         } else if (tokens.tokens[0].type == TokenType::RUN) {
             run_program();
-            return;
+            return false;
         } else if (tokens.tokens[0].type == TokenType::SAVE) {
             int p = 0; execute_save(tokens, p);
-            return;
+            return false;
         } else if (tokens.tokens[0].type == TokenType::LOAD) {
             int p = 0; execute_load(tokens, p);
-            return;
+            return false;
         } else if (tokens.tokens[0].type == TokenType::FILES) {
             int p = 0; execute_files(tokens, p);
-            return;
+            return false;
         }
         int pos = 0;
         branch_taken = false;
@@ -2008,6 +2016,7 @@ void parse_and_execute(const TokenList& tokens) {
         printf("%s", buf);
         hal_display_print(buf);
     }
+    return false;
 }
 
 void store_line(int line_number, const TokenList& tokens) {

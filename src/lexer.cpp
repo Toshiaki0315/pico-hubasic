@@ -203,6 +203,14 @@ TokenList lex(const char* source) {
             continue;
         }
 
+        // ? は PRINT のショートカット
+        if (c == '?') {
+            token_list.tokens[token_list.size] = {TokenType::PRINT, "?"};
+            token_list.size++;
+            pos++;
+            continue;
+        }
+
         // Unknown character, skip it
         pos++;
     }

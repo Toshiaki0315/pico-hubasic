@@ -16,10 +16,14 @@ void repl_start() {
     printf("%s", banner);
     hal_display_print(banner);
 
+    bool show_ready = true;
+
     while (true) {
-        const char* ready = "Ready\n";
-        printf("%s", ready);
-        hal_display_print(ready);
+        if (show_ready) {
+            const char* ready = "Ready\n";
+            printf("%s", ready);
+            hal_display_print(ready);
+        }
         
         // Wait for a full line of input
         input_ptr = 0;
@@ -32,7 +36,7 @@ void repl_start() {
                 continue; // Prevent infinite loop on EOF
             }
             
-            // Simple Line Editor implementation (Phase 1)
+            // Simple Line Editor implementation
             if (c == '\r' || c == '\n') {
                 printf("\n");
                 hal_display_print("\n");
@@ -58,11 +62,15 @@ void repl_start() {
         }
 
         if (input_ptr > 0) {
-            // Lexical Analysis (Phase 1) - Input buffer is passed directly
+            // Lexical Analysis
             TokenList tokens = lex(input_buffer);
             
-            // Parse & Execute Engine (Phase 1)
-            parse_and_execute(tokens);
+            // Parse & Execute.
+            // Returns true if a line was stored (line-number mode) -> suppress Ready
+            bool line_stored = parse_and_execute(tokens);
+            show_ready = !line_stored;
+        } else {
+            show_ready = true;
         }
     }
 }
